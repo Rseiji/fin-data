@@ -44,6 +44,14 @@ def test_parse_timestamp_date_string():
     assert ts.year == 2024
 
 
+def test_parse_timestamp_iso_with_timezone():
+    ts = _parse_timestamp("2020-07-01T00:00:00+00:00")
+    assert ts is not None
+    assert ts.year == 2020
+    assert ts.month == 7
+    assert ts.day == 1
+
+
 def test_raw_to_quote_success():
     payload = {
         "symbol": "BTCUSD",

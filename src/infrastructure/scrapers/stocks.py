@@ -1,6 +1,6 @@
 """Brazilian stock / ETF price scraper using Yahoo Finance API (unofficial)."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
@@ -99,10 +99,25 @@ def scrape_b3_quote(symbol: str) -> Dict[str, Any]:
 
 
 def scrape_b3_history(symbol: str, lookback_days: int = 6) -> List[Dict[str, Any]]:
-    """Fetch daily closing prices for the requested lookback window."""
+    """Fetch daily closing prices for the requested lookback window.
+
+    Yahoo Finance chart endpoint accepts explicit Unix timestamps for custom
+    windows; using a raw "2190d" range token is not supported for long lookbacks
+    and can collapse the response to the latest day only.
+    """
+    if lookback_days <= 0:
+        lookback_days = 1
+
+    end_ts = datetime.now(tz=timezone.utc)
+    start_ts = end_ts - timedelta(days=lookback_days)
+
     data = fetch_json(
         YAHOO_QUOTE_URL.format(ticker=_yahoo_ticker(symbol)),
-        params={"interval": "1d", "range": f"{max(lookback_days + 1, 2)}d"},
+        params={
+            "interval": "1d",
+            "period1": int(start_ts.timestamp()),
+            "period2": int(end_ts.timestamp()),
+        },
     )
     result_data = data.get("chart", {}).get("result", [])
     if not result_data:

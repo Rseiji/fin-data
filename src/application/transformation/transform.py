@@ -29,10 +29,18 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value, tz=timezone.utc)
     if isinstance(value, str):
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ"):
+        for fmt in (
+            "%d/%m/%Y",
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+        ):
             try:
                 dt = datetime.strptime(value, fmt)
-                return dt.replace(tzinfo=timezone.utc)
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone.utc)
             except ValueError:
                 continue
     return None
@@ -75,8 +83,12 @@ def _raw_to_quote(raw: RawQuote) -> Optional[Quote]:
     )
 
 
-def transform_symbol(db: Session, symbol: str, limit: int = 500) -> int:
-    """Transform unprocessed bronze records for a symbol into silver quotes."""
+def transform_symbol(db: Session, symbol: str, limit: int | None = None) -> int:
+    """Transform all bronze records for a symbol into silver quotes.
+
+    Passing None means no artificial cap on the number of records processed,
+    which is required for full historical backfills.
+    """
     raw_quotes = repositories.find_raw_quotes_by_symbol(db, symbol, limit=limit)
     saved = 0
     for raw in raw_quotes:
