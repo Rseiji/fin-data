@@ -1,6 +1,6 @@
 """Crypto price scraper using CoinGecko public API (no key required)."""
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
 
@@ -16,6 +16,27 @@ CRYPTO_SYMBOLS: Dict[str, str] = {
     "SOLUSD": "solana",
     "ADAUSD": "cardano",
 }
+
+
+class CryptoScraper:
+    asset_type = "crypto"
+    symbols = list(CRYPTO_SYMBOLS.keys())
+
+    def fetch_latest(self, symbol: str) -> Dict[str, Any]:
+        return next(
+            record for record in self.fetch_all(symbols=[symbol], lookback_days=0)
+            if record["symbol"] == symbol
+        )
+
+    def fetch_history(self, symbol: str, lookback_days: int = 0) -> List[Dict[str, Any]]:
+        return self.fetch_all(symbols=[symbol], lookback_days=lookback_days)
+
+    def fetch_all(
+        self,
+        symbols: Iterable[str] | None = None,
+        lookback_days: int = 0,
+    ) -> List[Dict[str, Any]]:
+        return scrape_crypto_prices(list(symbols) if symbols is not None else self.symbols, lookback_days)
 
 
 def scrape_crypto_prices(

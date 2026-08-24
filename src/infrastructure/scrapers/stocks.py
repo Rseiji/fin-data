@@ -1,7 +1,7 @@
 """Brazilian stock / ETF price scraper using Yahoo Finance API (unofficial)."""
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
 
@@ -29,6 +29,45 @@ ETF_SYMBOLS: List[str] = [
     "SMAL11",
     "XFIX11",
 ]
+
+
+class StockScraper:
+    asset_type = "stock"
+    symbols = STOCK_SYMBOLS
+
+    def fetch_latest(self, symbol: str) -> Dict[str, Any]:
+        return scrape_b3_quote(symbol)
+
+    def fetch_history(self, symbol: str, lookback_days: int = 0) -> List[Dict[str, Any]]:
+        return scrape_b3_history(symbol, lookback_days=lookback_days)
+
+    def fetch_all(
+        self,
+        symbols: Iterable[str] | None = None,
+        lookback_days: int = 0,
+    ) -> List[Dict[str, Any]]:
+        return scrape_stocks(list(symbols) if symbols is not None else self.symbols, lookback_days)
+
+
+class ETFScraper:
+    asset_type = "etf"
+    symbols = ETF_SYMBOLS
+
+    def fetch_latest(self, symbol: str) -> Dict[str, Any]:
+        return scrape_etf_quote(symbol)
+
+    def fetch_history(self, symbol: str, lookback_days: int = 0) -> List[Dict[str, Any]]:
+        history = scrape_b3_history(symbol, lookback_days=lookback_days)
+        for record in history:
+            record["asset_type"] = "etf"
+        return history
+
+    def fetch_all(
+        self,
+        symbols: Iterable[str] | None = None,
+        lookback_days: int = 0,
+    ) -> List[Dict[str, Any]]:
+        return scrape_etfs(list(symbols) if symbols is not None else self.symbols, lookback_days)
 
 
 def _yahoo_ticker(symbol: str) -> str:

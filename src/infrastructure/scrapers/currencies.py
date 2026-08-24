@@ -1,7 +1,7 @@
 """Currency exchange rate scraper using exchangerate.host (free tier)."""
 import logging
 from datetime import date, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
 
@@ -18,6 +18,24 @@ CURRENCY_PAIRS: Dict[str, tuple[str, str]] = {
     "EURUSD": ("EUR", "USD"),
     "GBPBRL": ("GBP", "BRL"),
 }
+
+
+class CurrencyScraper:
+    asset_type = "currency"
+    symbols = list(CURRENCY_PAIRS.keys())
+
+    def fetch_latest(self, symbol: str) -> Dict[str, Any]:
+        return scrape_currency_pair(symbol)
+
+    def fetch_history(self, symbol: str, lookback_days: int = 0) -> List[Dict[str, Any]]:
+        return scrape_currencies([symbol], lookback_days=lookback_days)
+
+    def fetch_all(
+        self,
+        symbols: Iterable[str] | None = None,
+        lookback_days: int = 0,
+    ) -> List[Dict[str, Any]]:
+        return scrape_currencies(list(symbols) if symbols is not None else self.symbols, lookback_days)
 
 
 def scrape_currency_pair(symbol: str) -> Dict[str, Any]:

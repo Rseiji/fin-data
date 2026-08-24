@@ -63,3 +63,16 @@ def test_scrape_currency_pair():
 def test_scrape_unknown_currency_pair():
     with pytest.raises(ValueError, match="Unknown currency pair"):
         currencies.scrape_currency_pair("INVALID")
+
+
+def test_registry_resolves_scrapers_by_category():
+    from src.infrastructure.scrapers.registry import get_scraper, list_scrapers
+
+    scraper_names = list_scrapers()
+    assert {"stocks", "etfs", "crypto", "currency", "index"}.issubset(set(scraper_names))
+
+    for scraper_name in scraper_names:
+        scraper = get_scraper(scraper_name)
+        assert scraper is not None
+        assert hasattr(scraper, "fetch_all")
+        assert hasattr(scraper, "fetch_history")
