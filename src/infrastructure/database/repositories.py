@@ -1,0 +1,162 @@
+"""SQLAlchemy-backed repository implementations."""
+import json
+from datetime import datetime
+from decimal import Decimal
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+from src.domain.entities.quote import DailySummary, Quote, RawQuote
+from src.infrastructure.database import models
+
+
+def save_raw_quote(db: Session, raw_quote: RawQuote) -> None:
+    record = models.BronzeQuote(
+        id=raw_quote.id,
+        symbol=raw_quote.symbol,
+        asset_type=raw_quote.asset_type,
+        source=raw_quote.source,
+        raw_payload=raw_quote.raw_payload,
+        ingested_at=raw_quote.ingested_at,
+    )
+    db.merge(record)
+    db.commit()
+
+
+def find_raw_quotes_by_symbol(
+    db: Session, symbol: str, limit: int = 100
+) -> List[RawQuote]:
+    rows = (
+        db.query(models.BronzeQuote)
+        .filter(models.BronzeQuote.symbol == symbol)
+        .order_by(models.BronzeQuote.ingested_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        RawQuote(
+            id=r.id,
+            symbol=r.symbol,
+            asset_type=r.asset_type.value,
+            source=r.source,
+            raw_payload=r.raw_payload,
+            ingested_at=r.ingested_at,
+        )
+        for r in rows
+    ]
+
+
+def save_quote(db: Session, quote: Quote) -> None:
+    record = models.SilverQuote(
+        id=quote.id,
+        bronze_id=quote.bronze_id,
+        symbol=quote.symbol,
+        asset_type=quote.asset_type,
+        price=quote.price,
+        currency=quote.currency,
+        quote_date=quote.quote_date,
+        source=quote.source,
+        processed_at=quote.processed_at,
+    )
+    db.merge(record)
+    db.commit()
+
+
+def find_quotes_by_symbol(
+    db: Session,
+    symbol: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> List[Quote]:
+    q = db.query(models.SilverQuote).filter(models.SilverQuote.symbol == symbol)
+    if start:
+        q = q.filter(models.SilverQuote.quote_date >= start)
+    if end:
+        q = q.filter(models.SilverQuote.quote_date <= end)
+    rows = q.order_by(models.SilverQuote.quote_date.desc()).all()
+    return [
+        Quote(
+            id=r.id,
+            bronze_id=r.bronze_id,
+            symbol=r.symbol,
+            asset_type=r.asset_type.value,
+            price=Decimal(str(r.price)),
+            currency=r.currency,
+            quote_date=r.quote_date,
+            source=r.source,
+            processed_at=r.processed_at,
+        )
+        for r in rows
+    ]
+
+
+def find_latest_quote(db: Session, symbol: str) -> Optional[Quote]:
+    row = (
+        db.query(models.SilverQuote)
+        .filter(models.SilverQuote.symbol == symbol)
+        .order_by(models.SilverQuote.quote_date.desc())
+        .first()
+    )
+    if not row:
+        return None
+    return Quote(
+        id=row.id,
+        bronze_id=row.bronze_id,
+        symbol=row.symbol,
+        asset_type=row.asset_type.value,
+        price=Decimal(str(row.price)),
+        currency=row.currency,
+        quote_date=row.quote_date,
+        source=row.source,
+        processed_at=row.processed_at,
+    )
+
+
+def save_daily_summary(db: Session, summary: DailySummary) -> None:
+    record = models.GoldDailySummary(
+        id=summary.id,
+        symbol=summary.symbol,
+        asset_type=summary.asset_type,
+        trade_date=summary.trade_date,
+        open_price=summary.open_price,
+        close_price=summary.close_price,
+        high_price=summary.high_price,
+        low_price=summary.low_price,
+        pct_change=summary.pct_change,
+        currency=summary.currency,
+        computed_at=summary.computed_at,
+    )
+    db.merge(record)
+    db.commit()
+
+
+def find_daily_summaries(
+    db: Session,
+    symbol: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> List[DailySummary]:
+    q = db.query(models.GoldDailySummary).filter(
+        models.GoldDailySummary.symbol == symbol
+    )
+    if start:
+        q = q.filter(models.GoldDailySummary.trade_date >= start)
+    if end:
+        q = q.filter(models.GoldDailySummary.trade_date <= end)
+    rows = q.order_by(models.GoldDailySummary.trade_date.desc()).all()
+    return [
+        DailySummary(
+            id=r.id,
+            symbol=r.symbol,
+            asset_type=r.asset_type.value,
+            trade_date=r.trade_date,
+            open_price=Decimal(str(r.open_price)) if r.open_price else None,
+            close_price=Decimal(str(r.close_price)) if r.close_price else None,
+            high_price=Decimal(str(r.high_price)) if r.high_price else None,
+            low_price=Decimal(str(r.low_price)) if r.low_price else None,
+            pct_change=Decimal(str(r.pct_change)) if r.pct_change else None,
+            currency=r.currency,
+            computed_at=r.computed_at,
+        )
+        for r in rows
+    ]

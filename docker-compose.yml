@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: findata
+      POSTGRES_PASSWORD: findata
+      POSTGRES_DB: findata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://findata:findata@db:5432/findata}
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      SCHEDULER_ENABLED: "true"
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
