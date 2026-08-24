@@ -42,12 +42,12 @@ def scrape_bcb_series(series_name: str, last_n: int = 1) -> List[Dict[str, Any]]
     return results
 
 
-def scrape_all_indexes() -> List[Dict[str, Any]]:
+def scrape_all_indexes(lookback_days: int = 0) -> List[Dict[str, Any]]:
     """Scrape latest values for all tracked Brazilian indexes."""
     results = []
     for name in BCB_CODES:
         try:
-            data = scrape_bcb_series(name, last_n=1)
+            data = scrape_bcb_series(name, last_n=max(lookback_days, 1))
             results.extend(data)
             logger.info("Fetched index %s: %s", name, data)
         except Exception as exc:

@@ -53,8 +53,9 @@ OpenAPI docs: `http://localhost:8000/docs`
 ### Local Development
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 # Set DATABASE_URL in .env
 python main.py
 ```

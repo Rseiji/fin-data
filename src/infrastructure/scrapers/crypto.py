@@ -18,7 +18,9 @@ CRYPTO_SYMBOLS: Dict[str, str] = {
 }
 
 
-def scrape_crypto_prices(symbols: List[str] | None = None) -> List[Dict[str, Any]]:
+def scrape_crypto_prices(
+    symbols: List[str] | None = None, lookback_days: int = 0
+) -> List[Dict[str, Any]]:
     """
     Fetch current prices from CoinGecko.
 
@@ -31,6 +33,28 @@ def scrape_crypto_prices(symbols: List[str] | None = None) -> List[Dict[str, Any
     if not coin_ids:
         logger.warning("No valid crypto symbols requested")
         return []
+
+    if lookback_days > 0:
+        results = []
+        for sym, coin_id in CRYPTO_SYMBOLS.items():
+            if sym not in symbols:
+                continue
+            data = fetch_json(
+                f"{COINGECKO_BASE}/coins/{coin_id}/market_chart",
+                params={"vs_currency": "usd", "days": lookback_days},
+            )
+            for timestamp, price in data.get("prices", []):
+                results.append(
+                    {
+                        "symbol": sym,
+                        "asset_type": "crypto",
+                        "source": "coingecko",
+                        "price": price,
+                        "currency": "USD",
+                        "timestamp": timestamp / 1000,
+                    }
+                )
+        return results
 
     url = f"{COINGECKO_BASE}/simple/price"
     params = {

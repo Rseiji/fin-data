@@ -1,5 +1,6 @@
 """Currency exchange rate scraper using exchangerate.host (free tier)."""
 import logging
+from datetime import date, timedelta
 from typing import Any, Dict, List
 
 from src.infrastructure.scrapers.base import fetch_json
@@ -45,10 +46,41 @@ def scrape_currency_pair(symbol: str) -> Dict[str, Any]:
     }
 
 
-def scrape_currencies(symbols: List[str] | None = None) -> List[Dict[str, Any]]:
+def scrape_currencies(
+    symbols: List[str] | None = None, lookback_days: int = 0
+) -> List[Dict[str, Any]]:
     """Scrape a list of currency pairs."""
     if symbols is None:
         symbols = list(CURRENCY_PAIRS.keys())
+    if lookback_days > 0:
+        results = []
+        today = date.today()
+        for offset in range(lookback_days + 1):
+            requested_date = today - timedelta(days=offset)
+            for sym in symbols:
+                try:
+                    base, quote = CURRENCY_PAIRS[sym.upper()]
+                    data = fetch_json(
+                        f"https://api.frankfurter.app/{requested_date.isoformat()}",
+                        params={"from": base, "to": quote},
+                    )
+                    rate = data.get("rates", {}).get(quote)
+                    if rate is not None:
+                        results.append(
+                            {
+                                "symbol": sym.upper(),
+                                "asset_type": "currency",
+                                "source": "frankfurter",
+                                "price": rate,
+                                "currency": quote,
+                                "base": base,
+                                "date": data.get("date"),
+                            }
+                        )
+                except Exception as exc:
+                    logger.error("Failed to fetch currency %s for %s: %s", sym, requested_date, exc)
+        return results
+
     results = []
     for sym in symbols:
         try:

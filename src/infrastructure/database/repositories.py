@@ -47,18 +47,20 @@ def find_raw_quotes_by_symbol(
 
 
 def save_quote(db: Session, quote: Quote) -> None:
-    record = models.SilverQuote(
-        id=quote.id,
-        bronze_id=quote.bronze_id,
-        symbol=quote.symbol,
-        asset_type=quote.asset_type,
-        price=quote.price,
-        currency=quote.currency,
-        quote_date=quote.quote_date,
-        source=quote.source,
-        processed_at=quote.processed_at,
-    )
-    db.merge(record)
+    record = db.query(models.SilverQuote).filter_by(
+        symbol=quote.symbol, quote_date=quote.quote_date, source=quote.source
+    ).one_or_none()
+    if record is None:
+        record = models.SilverQuote(id=quote.id)
+        db.add(record)
+    record.bronze_id = quote.bronze_id
+    record.symbol = quote.symbol
+    record.asset_type = quote.asset_type
+    record.price = quote.price
+    record.currency = quote.currency
+    record.quote_date = quote.quote_date
+    record.source = quote.source
+    record.processed_at = quote.processed_at
     db.commit()
 
 
@@ -113,20 +115,22 @@ def find_latest_quote(db: Session, symbol: str) -> Optional[Quote]:
 
 
 def save_daily_summary(db: Session, summary: DailySummary) -> None:
-    record = models.GoldDailySummary(
-        id=summary.id,
-        symbol=summary.symbol,
-        asset_type=summary.asset_type,
-        trade_date=summary.trade_date,
-        open_price=summary.open_price,
-        close_price=summary.close_price,
-        high_price=summary.high_price,
-        low_price=summary.low_price,
-        pct_change=summary.pct_change,
-        currency=summary.currency,
-        computed_at=summary.computed_at,
-    )
-    db.merge(record)
+    record = db.query(models.GoldDailySummary).filter_by(
+        symbol=summary.symbol, trade_date=summary.trade_date
+    ).one_or_none()
+    if record is None:
+        record = models.GoldDailySummary(id=summary.id)
+        db.add(record)
+    record.symbol = summary.symbol
+    record.asset_type = summary.asset_type
+    record.trade_date = summary.trade_date
+    record.open_price = summary.open_price
+    record.close_price = summary.close_price
+    record.high_price = summary.high_price
+    record.low_price = summary.low_price
+    record.pct_change = summary.pct_change
+    record.currency = summary.currency
+    record.computed_at = summary.computed_at
     db.commit()
 
 

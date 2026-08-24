@@ -11,6 +11,7 @@ from src.domain.entities.quote import RawQuote
 from src.infrastructure.database import repositories
 
 logger = logging.getLogger(__name__)
+LOOKBACK_DAYS = 6
 
 
 def _build_raw_quote(record: Dict[str, Any]) -> RawQuote:
@@ -49,23 +50,23 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     results: Dict[str, int] = {}
 
     logger.info("Starting ingestion: crypto")
-    crypto_data = crypto.scrape_crypto_prices()
+    crypto_data = crypto.scrape_crypto_prices(lookback_days=LOOKBACK_DAYS)
     results["crypto"] = ingest_records(db, crypto_data)
 
     logger.info("Starting ingestion: stocks")
-    stock_data = stocks.scrape_stocks()
+    stock_data = stocks.scrape_stocks(lookback_days=LOOKBACK_DAYS)
     results["stocks"] = ingest_records(db, stock_data)
 
     logger.info("Starting ingestion: etfs")
-    etf_data = stocks.scrape_etfs()
+    etf_data = stocks.scrape_etfs(lookback_days=LOOKBACK_DAYS)
     results["etfs"] = ingest_records(db, etf_data)
 
     logger.info("Starting ingestion: indexes")
-    index_data = indexes.scrape_all_indexes()
+    index_data = indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS)
     results["indexes"] = ingest_records(db, index_data)
 
     logger.info("Starting ingestion: currencies")
-    currency_data = currencies.scrape_currencies()
+    currency_data = currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS)
     results["currencies"] = ingest_records(db, currency_data)
 
     return results
