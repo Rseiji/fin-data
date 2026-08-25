@@ -4,11 +4,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN uv pip install --system --no-cache -r requirements.txt
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 
 EXPOSE 8000
 
-CMD ["python", "main.py"]
+CMD ["uv", "run", "--no-sync", "python", "main.py"]

@@ -44,7 +44,7 @@ src/
 ```bash
 cp .env.example .env
 # Edit .env with your settings
-docker-compose up -d
+docker compose up -d
 ```
 
 The API will be available at `http://localhost:8000`.  
@@ -53,11 +53,9 @@ OpenAPI docs: `http://localhost:8000/docs`
 ### Local Development
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync --dev
 # Set DATABASE_URL in .env
-python main.py
+uv run python main.py
 ```
 
 ## API Endpoints
@@ -73,7 +71,7 @@ python main.py
 ## Testing
 
 ```bash
-pytest tests/unit/ -v
+uv run pytest tests/unit/ -v
 ```
 
 ## Medallion Architecture
