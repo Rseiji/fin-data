@@ -2,12 +2,14 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     String,
     Numeric,
     DateTime,
     Text,
     Enum,
+    JSON,
     UniqueConstraint,
     Index,
     func,
@@ -28,6 +30,20 @@ class Layer(str, enum.Enum):
     bronze = "bronze"
     silver = "silver"
     gold = "gold"
+
+
+class TrackedAsset(Base):
+    __tablename__ = "tracked_assets"
+
+    symbol = Column(String(32), primary_key=True)
+    asset_type = Column(Enum(AssetType), nullable=False)
+    source = Column(String(64), nullable=False, server_default="yahoo_finance")
+    provider_symbol = Column(String(128), nullable=False, server_default="")
+    provider_config = Column(JSON, nullable=False, server_default="{}")
+    enabled = Column(Boolean, nullable=False, server_default="1")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (Index("ix_tracked_assets_enabled_type", "enabled", "asset_type"),)
 
 
 # ---------------------------------------------------------------------------

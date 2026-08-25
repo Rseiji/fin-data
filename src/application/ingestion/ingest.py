@@ -47,6 +47,12 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     """
     from src.infrastructure.scrapers import crypto, stocks, indexes, currencies
 
+    stock_assets = repositories.list_enabled_assets(db, "stock")
+    etf_assets = repositories.list_enabled_assets(db, "etf")
+    crypto_assets = repositories.list_enabled_assets(db, "crypto")
+    currency_assets = repositories.list_enabled_assets(db, "currency")
+    index_assets = repositories.list_enabled_assets(db, "index")
+
     results: Dict[str, int] = {}
 
     logger.info("Starting ingestion: crypto")
@@ -54,19 +60,19 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     results["crypto"] = ingest_records(db, crypto_data)
 
     logger.info("Starting ingestion: stocks")
-    stock_data = stocks.scrape_stocks(lookback_days=LOOKBACK_DAYS)
+    stock_data = stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS)
     results["stocks"] = ingest_records(db, stock_data)
 
     logger.info("Starting ingestion: etfs")
-    etf_data = stocks.scrape_etfs(lookback_days=LOOKBACK_DAYS)
+    etf_data = stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS)
     results["etfs"] = ingest_records(db, etf_data)
 
     logger.info("Starting ingestion: indexes")
-    index_data = indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS)
+    index_data = indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets)
     results["indexes"] = ingest_records(db, index_data)
 
     logger.info("Starting ingestion: currencies")
-    currency_data = currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS)
+    currency_data = currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets)
     results["currencies"] = ingest_records(db, currency_data)
 
     return results

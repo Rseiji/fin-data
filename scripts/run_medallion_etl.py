@@ -13,27 +13,23 @@ from typing import Iterable, List
 from src.application.aggregation.aggregate import run_aggregation_pipeline
 from src.application.ingestion.ingest import run_ingestion_pipeline
 from src.application.transformation.transform import run_transformation_pipeline
-from src.infrastructure.database.engine import SessionLocal
-from src.infrastructure.scrapers.crypto import CRYPTO_SYMBOLS
-from src.infrastructure.scrapers.currencies import CURRENCY_PAIRS
-from src.infrastructure.scrapers.indexes import BCB_CODES
-from src.infrastructure.scrapers.stocks import ETF_SYMBOLS, STOCK_SYMBOLS
+from src.infrastructure.database import repositories
+from src.infrastructure.database.engine import SessionLocal, create_all_tables
 
 
 def resolve_all_symbols(symbols: List[str] | None = None) -> List[str]:
     if symbols is not None:
         return [s.upper() for s in symbols]
 
-    return (
-        list(STOCK_SYMBOLS)
-        + list(ETF_SYMBOLS)
-        + list(CRYPTO_SYMBOLS.keys())
-        + list(CURRENCY_PAIRS.keys())
-        + list(BCB_CODES.keys())
-    )
+    db = SessionLocal()
+    try:
+        return repositories.list_enabled_symbols(db)
+    finally:
+        db.close()
 
 
 def run_etl(symbols: List[str] | None = None) -> dict:
+    create_all_tables()
     db = SessionLocal()
     try:
         target_symbols = resolve_all_symbols(symbols)

@@ -13,12 +13,10 @@ class ScraperStrategy(Protocol):
     """Common interface for all source-specific scrapers."""
 
     asset_type: str
-    symbols: list[str]
-
-    def fetch_latest(self, symbol: str):
+    def fetch_latest(self, asset):
         ...
 
-    def fetch_history(self, symbol: str, lookback_days: int = 0):
+    def fetch_history(self, asset, lookback_days: int = 0):
         ...
 
     def fetch_all(self, lookback_days: int = 0):

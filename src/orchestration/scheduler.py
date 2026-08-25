@@ -6,21 +6,19 @@ from apscheduler.triggers.cron import CronTrigger
 
 from src.config.settings import settings
 from src.infrastructure.database.engine import SessionLocal
+from src.infrastructure.database import repositories
 
 logger = logging.getLogger(__name__)
 
 
 def _get_all_symbols():
-    from src.infrastructure.scrapers.stocks import STOCK_SYMBOLS, ETF_SYMBOLS
-    from src.infrastructure.scrapers.crypto import CRYPTO_SYMBOLS
-    from src.infrastructure.scrapers.currencies import CURRENCY_PAIRS
-    from src.infrastructure.scrapers.indexes import BCB_CODES
+    db = SessionLocal()
+    try:
+        tracked_symbols = repositories.list_enabled_symbols(db)
+    finally:
+        db.close()
     return (
-        list(STOCK_SYMBOLS)
-        + list(ETF_SYMBOLS)
-        + list(CRYPTO_SYMBOLS.keys())
-        + list(CURRENCY_PAIRS.keys())
-        + list(BCB_CODES.keys())
+        tracked_symbols
     )
 
 
@@ -30,14 +28,15 @@ def _run_stocks_pipeline():
     from src.application.ingestion.ingest import ingest_records
     from src.application.transformation.transform import run_transformation_pipeline
     from src.application.aggregation.aggregate import run_aggregation_pipeline
-    from src.infrastructure.scrapers.stocks import STOCK_SYMBOLS, ETF_SYMBOLS
 
     logger.info("Stocks/ETF pipeline starting…")
     db = SessionLocal()
     try:
-        records = stocks.scrape_stocks() + stocks.scrape_etfs()
+        stock_assets = repositories.list_enabled_assets(db, "stock")
+        etf_assets = repositories.list_enabled_assets(db, "etf")
+        records = stocks.scrape_stocks(stock_assets) + stocks.scrape_etfs(etf_assets)
         ingest_records(db, records)
-        symbols = list(STOCK_SYMBOLS) + list(ETF_SYMBOLS)
+        symbols = [asset.symbol for asset in stock_assets + etf_assets]
         run_transformation_pipeline(db, symbols)
         run_aggregation_pipeline(db, symbols)
         logger.info("Stocks/ETF pipeline completed")
@@ -53,20 +52,20 @@ def _run_crypto_currency_pipeline():
     from src.application.ingestion.ingest import ingest_records
     from src.application.transformation.transform import run_transformation_pipeline
     from src.application.aggregation.aggregate import run_aggregation_pipeline
-    from src.infrastructure.scrapers.crypto import CRYPTO_SYMBOLS
-    from src.infrastructure.scrapers.currencies import CURRENCY_PAIRS
-    from src.infrastructure.scrapers.indexes import BCB_CODES
 
     logger.info("Crypto/currency pipeline starting…")
     db = SessionLocal()
     try:
+        crypto_assets = repositories.list_enabled_assets(db, "crypto")
+        currency_assets = repositories.list_enabled_assets(db, "currency")
+        index_assets = repositories.list_enabled_assets(db, "index")
         records = (
-            crypto.scrape_crypto_prices()
-            + currencies.scrape_currencies()
-            + indexes.scrape_all_indexes()
+            crypto.scrape_crypto_prices(assets=crypto_assets)
+            + currencies.scrape_currencies(assets=currency_assets)
+            + indexes.scrape_all_indexes(assets=index_assets)
         )
         ingest_records(db, records)
-        symbols = list(CRYPTO_SYMBOLS.keys()) + list(CURRENCY_PAIRS.keys()) + list(BCB_CODES.keys())
+        symbols = [asset.symbol for asset in crypto_assets + currency_assets + index_assets]
         run_transformation_pipeline(db, symbols)
         run_aggregation_pipeline(db, symbols)
         logger.info("Crypto/currency pipeline completed")

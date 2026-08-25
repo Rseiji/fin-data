@@ -9,10 +9,7 @@ from src.infrastructure.database.engine import get_db
 from src.application.ingestion.ingest import run_ingestion_pipeline
 from src.application.transformation.transform import run_transformation_pipeline
 from src.application.aggregation.aggregate import run_aggregation_pipeline
-from src.infrastructure.scrapers.stocks import STOCK_SYMBOLS, ETF_SYMBOLS
-from src.infrastructure.scrapers.crypto import CRYPTO_SYMBOLS
-from src.infrastructure.scrapers.currencies import CURRENCY_PAIRS
-from src.infrastructure.scrapers.indexes import BCB_CODES
+from src.infrastructure.database import repositories
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -32,11 +29,7 @@ def run_full_pipeline(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
 
     all_symbols = (
-        list(STOCK_SYMBOLS)
-        + list(ETF_SYMBOLS)
-        + list(CRYPTO_SYMBOLS.keys())
-        + list(CURRENCY_PAIRS.keys())
-        + list(BCB_CODES.keys())
+        repositories.list_enabled_symbols(db)
     )
 
     try:

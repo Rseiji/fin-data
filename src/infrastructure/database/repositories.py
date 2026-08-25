@@ -10,6 +10,51 @@ from src.domain.entities.quote import DailySummary, Quote, RawQuote
 from src.infrastructure.database import models
 
 
+def list_enabled_assets(db: Session, asset_type: Optional[str] = None) -> List[models.TrackedAsset]:
+    query = db.query(models.TrackedAsset).filter(models.TrackedAsset.enabled.is_(True))
+    if asset_type is not None:
+        query = query.filter(models.TrackedAsset.asset_type == asset_type)
+    return query.order_by(models.TrackedAsset.symbol).all()
+
+
+def list_enabled_symbols(db: Session, asset_type: Optional[str] = None) -> List[str]:
+    return [asset.symbol for asset in list_enabled_assets(db, asset_type)]
+
+
+def ensure_default_tracked_assets(db: Session) -> None:
+    defaults = [
+        *[(symbol, models.AssetType.stock, "yahoo_finance", f"{symbol}.SA", {}) for symbol in (
+            "PETR4", "ITUB4", "SAPR11", "CEAB3", "VALE3", "BBAS3", "WEGE3", "RENT3"
+        )],
+        *[(symbol, models.AssetType.etf, "yahoo_finance", f"{symbol}.SA", {}) for symbol in (
+            "IVVB11", "BOVA11", "DIVO11", "SMAL11", "XFIX11"
+        )],
+        ("BTCUSD", models.AssetType.crypto, "coingecko", "bitcoin", {"vs_currency": "usd"}),
+        ("ETHUSD", models.AssetType.crypto, "coingecko", "ethereum", {"vs_currency": "usd"}),
+        ("BNBUSD", models.AssetType.crypto, "coingecko", "binancecoin", {"vs_currency": "usd"}),
+        ("SOLUSD", models.AssetType.crypto, "coingecko", "solana", {"vs_currency": "usd"}),
+        ("ADAUSD", models.AssetType.crypto, "coingecko", "cardano", {"vs_currency": "usd"}),
+        ("USDBRL", models.AssetType.currency, "open_er_api", "USD/BRL", {"base": "USD", "quote": "BRL"}),
+        ("JPYBRL", models.AssetType.currency, "open_er_api", "JPY/BRL", {"base": "JPY", "quote": "BRL"}),
+        ("USDEUR", models.AssetType.currency, "open_er_api", "USD/EUR", {"base": "USD", "quote": "EUR"}),
+        ("EURUSD", models.AssetType.currency, "open_er_api", "EUR/USD", {"base": "EUR", "quote": "USD"}),
+        ("GBPBRL", models.AssetType.currency, "open_er_api", "GBP/BRL", {"base": "GBP", "quote": "BRL"}),
+        ("SELIC", models.AssetType.index, "bcb", "432", {}),
+        ("CDI", models.AssetType.index, "bcb", "12", {}),
+        ("IPCA", models.AssetType.index, "bcb", "433", {}),
+    ]
+    for symbol, asset_type, source, provider_symbol, provider_config in defaults:
+        asset = db.query(models.TrackedAsset).filter_by(symbol=symbol).one_or_none()
+        if asset is None:
+            asset = models.TrackedAsset(symbol=symbol)
+            db.add(asset)
+        asset.asset_type = asset_type
+        asset.source = source
+        asset.provider_symbol = provider_symbol
+        asset.provider_config = provider_config
+    db.commit()
+
+
 def save_raw_quote(db: Session, raw_quote: RawQuote) -> None:
     record = models.BronzeQuote(
         id=raw_quote.id,

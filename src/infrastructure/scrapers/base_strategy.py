@@ -8,12 +8,10 @@ class BaseScraperStrategy(Protocol):
     """Minimal common interface for data scrapers."""
 
     asset_type: str
-    symbols: list[str]
-
-    def fetch_latest(self, symbol: str) -> dict[str, Any]:
+    def fetch_latest(self, asset: Any) -> dict[str, Any]:
         ...
 
-    def fetch_history(self, symbol: str, lookback_days: int = 0) -> list[dict[str, Any]]:
+    def fetch_history(self, asset: Any, lookback_days: int = 0) -> list[dict[str, Any]]:
         ...
 
     def fetch_all(

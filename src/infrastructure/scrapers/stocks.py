@@ -4,36 +4,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
+from src.infrastructure.database.models import TrackedAsset
 
 logger = logging.getLogger(__name__)
 
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 
-# Brazilian stocks traded on B3 (suffix .SA for Yahoo)
-STOCK_SYMBOLS: List[str] = [
-    "PETR4",
-    "ITUB4",
-    "SAPR11",
-    "CEAB3",
-    "VALE3",
-    "BBAS3",
-    "WEGE3",
-    "RENT3",
-]
-
-# Brazilian ETFs
-ETF_SYMBOLS: List[str] = [
-    "IVVB11",
-    "BOVA11",
-    "DIVO11",
-    "SMAL11",
-    "XFIX11",
-]
-
-
 class StockScraper:
     asset_type = "stock"
-    symbols = STOCK_SYMBOLS
 
     def fetch_latest(self, symbol: str) -> Dict[str, Any]:
         return scrape_b3_quote(symbol)
@@ -43,15 +21,16 @@ class StockScraper:
 
     def fetch_all(
         self,
-        symbols: Iterable[str] | None = None,
+        symbols: Iterable[str | TrackedAsset] | None = None,
         lookback_days: int = 0,
     ) -> List[Dict[str, Any]]:
-        return scrape_stocks(list(symbols) if symbols is not None else self.symbols, lookback_days)
+        if symbols is None:
+            raise ValueError("symbols must be provided from the asset catalog")
+        return scrape_stocks(list(symbols), lookback_days)
 
 
 class ETFScraper:
     asset_type = "etf"
-    symbols = ETF_SYMBOLS
 
     def fetch_latest(self, symbol: str) -> Dict[str, Any]:
         return scrape_etf_quote(symbol)
@@ -64,18 +43,27 @@ class ETFScraper:
 
     def fetch_all(
         self,
-        symbols: Iterable[str] | None = None,
+        symbols: Iterable[str | TrackedAsset] | None = None,
         lookback_days: int = 0,
     ) -> List[Dict[str, Any]]:
-        return scrape_etfs(list(symbols) if symbols is not None else self.symbols, lookback_days)
+        if symbols is None:
+            raise ValueError("symbols must be provided from the asset catalog")
+        return scrape_etfs(list(symbols), lookback_days)
 
 
-def _yahoo_ticker(symbol: str) -> str:
-    return f"{symbol}.SA"
+def _asset_symbol(asset: str | TrackedAsset) -> str:
+    return asset if isinstance(asset, str) else asset.symbol
 
 
-def scrape_b3_quote(symbol: str) -> Dict[str, Any]:
+def _yahoo_ticker(asset: str | TrackedAsset) -> str:
+    if isinstance(asset, TrackedAsset) and asset.provider_symbol:
+        return asset.provider_symbol
+    return f"{asset}.SA"
+
+
+def scrape_b3_quote(symbol: str | TrackedAsset) -> Dict[str, Any]:
     """Fetch the latest quote for a single B3 ticker via Yahoo Finance."""
+    canonical_symbol = _asset_symbol(symbol)
     ticker = _yahoo_ticker(symbol)
     url = YAHOO_QUOTE_URL.format(ticker=ticker)
     params = {"interval": "1d", "range": "1d"}
@@ -83,11 +71,11 @@ def scrape_b3_quote(symbol: str) -> Dict[str, Any]:
 
     result_data = data.get("chart", {}).get("result", [])
     if not result_data:
-        raise ValueError(f"No data returned for {symbol}")
+        raise ValueError(f"No data returned for {canonical_symbol}")
 
     meta = result_data[0].get("meta", {})
     return {
-        "symbol": symbol,
+        "symbol": canonical_symbol,
         "asset_type": "stock",
         "source": "yahoo_finance",
         "price": meta.get("regularMarketPrice"),
@@ -98,7 +86,7 @@ def scrape_b3_quote(symbol: str) -> Dict[str, Any]:
     }
 
 
-def scrape_b3_history(symbol: str, lookback_days: int = 6) -> List[Dict[str, Any]]:
+def scrape_b3_history(symbol: str | TrackedAsset, lookback_days: int = 6) -> List[Dict[str, Any]]:
     """Fetch daily closing prices for the requested lookback window.
 
     Yahoo Finance chart endpoint accepts explicit Unix timestamps for custom
@@ -121,7 +109,7 @@ def scrape_b3_history(symbol: str, lookback_days: int = 6) -> List[Dict[str, Any
     )
     result_data = data.get("chart", {}).get("result", [])
     if not result_data:
-        raise ValueError(f"No data returned for {symbol}")
+        raise ValueError(f"No data returned for {_asset_symbol(symbol)}")
 
     chart = result_data[0]
     timestamps = chart.get("timestamp", [])
@@ -129,7 +117,7 @@ def scrape_b3_history(symbol: str, lookback_days: int = 6) -> List[Dict[str, Any
     currency = chart.get("meta", {}).get("currency", "BRL")
     return [
         {
-            "symbol": symbol,
+            "symbol": _asset_symbol(symbol),
             "asset_type": "stock",
             "source": "yahoo_finance",
             "price": close,
@@ -141,7 +129,7 @@ def scrape_b3_history(symbol: str, lookback_days: int = 6) -> List[Dict[str, Any
     ]
 
 
-def scrape_etf_quote(symbol: str) -> Dict[str, Any]:
+def scrape_etf_quote(symbol: str | TrackedAsset) -> Dict[str, Any]:
     """Fetch the latest quote for a single ETF ticker via Yahoo Finance."""
     result = scrape_b3_quote(symbol)
     result["asset_type"] = "etf"
@@ -149,11 +137,11 @@ def scrape_etf_quote(symbol: str) -> Dict[str, Any]:
 
 
 def scrape_stocks(
-    symbols: List[str] | None = None, lookback_days: int = 0
+    symbols: Iterable[str | TrackedAsset] | None = None, lookback_days: int = 0
 ) -> List[Dict[str, Any]]:
-    """Scrape a list of stock symbols (defaults to STOCK_SYMBOLS)."""
+    """Scrape the supplied list of stock symbols."""
     if symbols is None:
-        symbols = STOCK_SYMBOLS
+        raise ValueError("symbols must be provided; load tracked assets from the database")
     results = []
     for sym in symbols:
         try:
@@ -168,11 +156,11 @@ def scrape_stocks(
 
 
 def scrape_etfs(
-    symbols: List[str] | None = None, lookback_days: int = 0
+    symbols: Iterable[str | TrackedAsset] | None = None, lookback_days: int = 0
 ) -> List[Dict[str, Any]]:
-    """Scrape a list of ETF symbols (defaults to ETF_SYMBOLS)."""
+    """Scrape the supplied list of ETF symbols."""
     if symbols is None:
-        symbols = ETF_SYMBOLS
+        raise ValueError("symbols must be provided; load tracked assets from the database")
     results = []
     for sym in symbols:
         try:

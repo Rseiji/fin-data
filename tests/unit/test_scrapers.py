@@ -4,6 +4,17 @@ import pytest
 import responses as resp_lib
 
 from src.infrastructure.scrapers import crypto, currencies, indexes
+from src.infrastructure.database.models import AssetType, TrackedAsset
+
+
+def _asset(symbol, asset_type, provider_symbol, provider_config=None, source="test"):
+    return TrackedAsset(
+        symbol=symbol,
+        asset_type=asset_type,
+        source=source,
+        provider_symbol=provider_symbol,
+        provider_config=provider_config or {},
+    )
 
 
 @resp_lib.activate
@@ -18,7 +29,10 @@ def test_scrape_crypto_prices():
         json=mock_response,
         status=200,
     )
-    results = crypto.scrape_crypto_prices(["BTCUSD", "ETHUSD"])
+    results = crypto.scrape_crypto_prices(assets=[
+        _asset("BTCUSD", AssetType.crypto, "bitcoin", {"vs_currency": "usd"}, "coingecko"),
+        _asset("ETHUSD", AssetType.crypto, "ethereum", {"vs_currency": "usd"}, "coingecko"),
+    ])
     assert len(results) == 2
     symbols = {r["symbol"] for r in results}
     assert "BTCUSD" in symbols
@@ -36,7 +50,9 @@ def test_scrape_bcb_series():
         json=mock_response,
         status=200,
     )
-    results = indexes.scrape_bcb_series("SELIC", last_n=1)
+    results = indexes.scrape_bcb_series(
+        "SELIC", last_n=1, asset=_asset("SELIC", AssetType.index, "432", source="bcb")
+    )
     assert len(results) == 1
     assert results[0]["symbol"] == "SELIC"
     assert results[0]["value"] == "10.50"
@@ -54,15 +70,19 @@ def test_scrape_currency_pair():
         json=mock_response,
         status=200,
     )
-    result = currencies.scrape_currency_pair("USDBRL")
+    result = currencies.scrape_currency_pair(
+        _asset("USDBRL", AssetType.currency, "USD/BRL", {"base": "USD", "quote": "BRL"})
+    )
     assert result["symbol"] == "USDBRL"
     assert result["price"] == 5.0
     assert result["currency"] == "BRL"
 
 
 def test_scrape_unknown_currency_pair():
-    with pytest.raises(ValueError, match="Unknown currency pair"):
-        currencies.scrape_currency_pair("INVALID")
+    with pytest.raises(KeyError):
+        currencies.scrape_currency_pair(
+            _asset("INVALID", AssetType.currency, "INVALID", {})
+        )
 
 
 def test_registry_resolves_scrapers_by_category():

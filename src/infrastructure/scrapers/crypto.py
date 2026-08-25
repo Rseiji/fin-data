@@ -3,24 +3,14 @@ import logging
 from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
+from src.infrastructure.database.models import TrackedAsset
 
 logger = logging.getLogger(__name__)
 
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
-# Map of trading symbol -> CoinGecko coin id
-CRYPTO_SYMBOLS: Dict[str, str] = {
-    "BTCUSD": "bitcoin",
-    "ETHUSD": "ethereum",
-    "BNBUSD": "binancecoin",
-    "SOLUSD": "solana",
-    "ADAUSD": "cardano",
-}
-
-
 class CryptoScraper:
     asset_type = "crypto"
-    symbols = list(CRYPTO_SYMBOLS.keys())
 
     def fetch_latest(self, symbol: str) -> Dict[str, Any]:
         return next(
@@ -33,33 +23,47 @@ class CryptoScraper:
 
     def fetch_all(
         self,
-        symbols: Iterable[str] | None = None,
+        symbols: Iterable[str | TrackedAsset] | None = None,
         lookback_days: int = 0,
     ) -> List[Dict[str, Any]]:
-        return scrape_crypto_prices(list(symbols) if symbols is not None else self.symbols, lookback_days)
+        if symbols is None:
+            raise ValueError("symbols must be provided from the asset catalog")
+        return scrape_crypto_prices(list(symbols), lookback_days)
 
 
 def scrape_crypto_prices(
-    symbols: List[str] | None = None, lookback_days: int = 0
+    symbols: Iterable[str | TrackedAsset] | None = None,
+    lookback_days: int = 0,
+    assets: Iterable[TrackedAsset] | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Fetch current prices from CoinGecko.
 
     Returns a list of raw price dicts, one per symbol.
     """
+    if assets is not None:
+        assets = list(assets)
+        symbols = assets
     if symbols is None:
-        symbols = list(CRYPTO_SYMBOLS.keys())
+        raise ValueError("assets or symbols must be provided; load tracked assets from the database")
+    requested = list(symbols)
+    asset_by_symbol = {
+        asset.symbol: asset for asset in requested if isinstance(asset, TrackedAsset)
+    }
+    symbol_names = [asset.symbol if isinstance(asset, TrackedAsset) else asset for asset in requested]
 
-    coin_ids = [CRYPTO_SYMBOLS[s] for s in symbols if s in CRYPTO_SYMBOLS]
+    coin_ids = [asset_by_symbol[s].provider_symbol for s in symbol_names if s in asset_by_symbol]
     if not coin_ids:
         logger.warning("No valid crypto symbols requested")
         return []
 
     if lookback_days > 0:
         results = []
-        for sym, coin_id in CRYPTO_SYMBOLS.items():
-            if sym not in symbols:
+        for sym in symbol_names:
+            asset = asset_by_symbol.get(sym)
+            if asset is None:
                 continue
+            coin_id = asset.provider_symbol
             data = fetch_json(
                 f"{COINGECKO_BASE}/coins/{coin_id}/market_chart",
                 params={"vs_currency": "usd", "days": lookback_days},
@@ -87,10 +91,11 @@ def scrape_crypto_prices(
     data = fetch_json(url, params=params)
 
     results = []
-    for sym, coin_id in CRYPTO_SYMBOLS.items():
-        if sym not in symbols or coin_id not in data:
+    for sym in symbol_names:
+        asset = asset_by_symbol.get(sym)
+        if asset is None or asset.provider_symbol not in data:
             continue
-        coin_data = data[coin_id]
+        coin_data = data[asset.provider_symbol]
         results.append(
             {
                 "symbol": sym,
