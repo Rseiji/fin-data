@@ -2,13 +2,14 @@
 import uvicorn
 
 from src.api.app import app
+from src.config.settings import settings
 from src.orchestration.scheduler import start_scheduler
 
 
 def main():
     scheduler = start_scheduler()
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        uvicorn.run(app, host=settings.api_host, port=settings.api_port)
     finally:
         if scheduler:
             scheduler.shutdown()

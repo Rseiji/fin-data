@@ -14,7 +14,7 @@ from typing import Optional
 
 from sqlalchemy import text
 
-from src.infrastructure.database.engine import engine
+from src.infrastructure.database.engine import DATABASE_SCHEMA, engine
 
 
 TABLES = {
@@ -30,6 +30,7 @@ def query_table(table_name: str, limit: int = 10):
         raise ValueError(f"Unsupported table: {table_name}. Available: {', '.join(TABLES.keys())}")
 
     with engine.connect() as conn:
+        conn.execute(text(f'SET search_path TO "{DATABASE_SCHEMA}"'))
         rows = conn.execute(text(query), {"limit": limit}).fetchall()
         return rows
 

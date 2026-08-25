@@ -1,15 +1,16 @@
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from src.config.settings import settings
 
+DATABASE_SCHEMA = settings.database_schema
 engine = create_engine(settings.database_url, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema=DATABASE_SCHEMA)
 
 
 def get_db():
@@ -21,8 +22,8 @@ def get_db():
 
 
 def create_all_tables():
+    _ensure_database_schema()
     Base.metadata.create_all(bind=engine)
-    _migrate_tracked_assets()
     from src.infrastructure.database import repositories
 
     db = SessionLocal()
@@ -32,14 +33,8 @@ def create_all_tables():
         db.close()
 
 
-def _migrate_tracked_assets():
-    columns = {column["name"] for column in inspect(engine).get_columns("tracked_assets")}
+def _ensure_database_schema():
+    if engine.dialect.name != "postgresql":
+        return
     with engine.begin() as connection:
-        if "provider_symbol" not in columns:
-            connection.execute(
-                text("ALTER TABLE tracked_assets ADD COLUMN provider_symbol VARCHAR(128) NOT NULL DEFAULT ''")
-            )
-        if "provider_config" not in columns:
-            connection.execute(
-                text("ALTER TABLE tracked_assets ADD COLUMN provider_config JSON NOT NULL DEFAULT '{}'")
-            )
+        connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{DATABASE_SCHEMA}"'))

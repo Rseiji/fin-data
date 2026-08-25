@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from src.domain.entities.quote import RawQuote
 from src.infrastructure.database import repositories
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
-LOOKBACK_DAYS = 6
+LOOKBACK_DAYS = settings.ingestion_lookback_days
 
 
 def _build_raw_quote(record: Dict[str, Any]) -> RawQuote:
