@@ -21,27 +21,38 @@ from src.application.aggregation.aggregate import run_aggregation_pipeline
 from src.application.ingestion.ingest import ingest_records
 from src.application.transformation.transform import run_transformation_pipeline
 from src.infrastructure.database.engine import SessionLocal, create_all_tables, engine
-from src.infrastructure.database import models
+from src.infrastructure.database import models, repositories
 from src.infrastructure.scrapers.crypto import scrape_crypto_prices
 from src.infrastructure.scrapers.currencies import scrape_currencies
 from src.infrastructure.scrapers.indexes import scrape_all_indexes
 from src.infrastructure.scrapers.stocks import scrape_etfs, scrape_stocks
 
 
+# these sources need the TrackedAsset catalog entry (provider_symbol/provider_config), not just the symbol string
+SOURCES_REQUIRING_ASSETS = {"crypto", "currency", "index"}
+
 SOURCE_HANDLERS = {
     "stocks": lambda symbols, days: scrape_stocks(symbols=symbols, lookback_days=days),
     "etfs": lambda symbols, days: scrape_etfs(symbols=symbols, lookback_days=days),
-    "crypto": lambda symbols, days: scrape_crypto_prices(symbols=symbols, lookback_days=days),
-    "currency": lambda symbols, days: scrape_currencies(symbols=symbols, lookback_days=days),
-    "index": lambda symbols, days: scrape_all_indexes(lookback_days=days, symbols=symbols),
+    "crypto": lambda assets, days: scrape_crypto_prices(assets=assets, lookback_days=days),
+    "currency": lambda assets, days: scrape_currencies(assets=assets, lookback_days=days),
+    "index": lambda assets, days: scrape_all_indexes(lookback_days=days, assets=assets),
 }
 
 
-def _fetch_records(source: str, symbols: List[str], days: int):
+def _fetch_records(db: Session, source: str, symbols: List[str], days: int):
     if source not in SOURCE_HANDLERS:
         raise ValueError(
             f"Unsupported source '{source}'. Supported: {', '.join(SOURCE_HANDLERS.keys())}"
         )
+    if source in SOURCES_REQUIRING_ASSETS:
+        assets = [
+            asset for asset in repositories.list_enabled_assets(db) if asset.symbol in symbols
+        ]
+        missing = set(symbols) - {asset.symbol for asset in assets}
+        if missing:
+            print(f"Warning: symbols not found in enabled tracked_assets catalog, skipping: {sorted(missing)}")
+        return SOURCE_HANDLERS[source](assets, days)
     return SOURCE_HANDLERS[source](symbols, days)
 
 
@@ -63,7 +74,7 @@ def run_initial_load(symbols: List[str], source: str, days: int, reset: bool = F
         if reset:
             _clear_symbols(db, symbols)
 
-        records = _fetch_records(source=source, symbols=symbols, days=days)
+        records = _fetch_records(db, source=source, symbols=symbols, days=days)
         bronze_count = ingest_records(db, records)
 
         transformed = run_transformation_pipeline(db, symbols)

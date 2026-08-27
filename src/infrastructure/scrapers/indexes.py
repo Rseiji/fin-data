@@ -1,7 +1,7 @@
 """Brazilian macro-economic index scrapers (IPCA, CDI, SELIC)."""
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Dict, Iterable, List
 
 from src.infrastructure.scrapers.base import fetch_json
@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 # Banco Central do Brasil open data API (BCB/SGS)
 BCB_SERIES_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados/ultimos/{n}?formato=json"
+BCB_RANGE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados?formato=json"
+BCB_MAX_ULTIMOS = 20  # the "ultimos/{n}" endpoint rejects n > 20
 
 class IndexScraper:
     asset_type = "index"
@@ -37,8 +39,20 @@ def scrape_bcb_series(series_name: str, last_n: int = 1, asset: TrackedAsset | N
     if code is None:
         raise ValueError(f"Provider symbol is required for BCB series: {series_name}")
 
-    url = BCB_SERIES_URL.format(code=code, n=last_n)
-    data = fetch_json(url)
+    if last_n > BCB_MAX_ULTIMOS:
+        # the "ultimos/{n}" endpoint caps at 20 records; use the date-range endpoint instead
+        start_date = date.today() - timedelta(days=last_n)
+        url = BCB_RANGE_URL.format(code=code)
+        data = fetch_json(
+            url,
+            params={
+                "dataInicial": start_date.strftime("%d/%m/%Y"),
+                "dataFinal": date.today().strftime("%d/%m/%Y"),
+            },
+        )
+    else:
+        url = BCB_SERIES_URL.format(code=code, n=last_n)
+        data = fetch_json(url)
 
     results = []
     for entry in data:

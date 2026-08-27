@@ -1,8 +1,8 @@
-"""Execute the medallion ETL pipeline for selected symbols.
+"""Update already-tracked symbols by running the medallion ETL pipeline.
 
 Usage:
-    python scripts/run_medallion_etl.py PETR4 IVVB11
-    python scripts/run_medallion_etl.py --symbols PETR4 IVVB11 --source stocks
+    python scripts/update_tracked_assets.py PETR4 IVVB11
+    python scripts/update_tracked_assets.py --symbols PETR4 IVVB11 --source stocks
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from src.infrastructure.database.engine import SessionLocal, create_all_tables
 
 
 def resolve_all_symbols(symbols: List[str] | None = None) -> List[str]:
-    if symbols is not None:
+    if symbols:
         return [s.upper() for s in symbols]
 
     db = SessionLocal()

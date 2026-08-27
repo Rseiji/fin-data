@@ -17,7 +17,8 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${DB_USER:-findata}:${DB_PASSWORD:-findata}@db:5432/${DB_NAME:-findata}}
+      # always target the "db" service by name, never the host .env DATABASE_URL (which points at localhost for local scripts)
+      DATABASE_URL: postgresql://${DB_USER:-findata}:${DB_PASSWORD:-findata}@db:5432/${DB_NAME:-findata}
       DATABASE_SCHEMA: ${DATABASE_SCHEMA:-fin_data}
       APP_ENV: ${APP_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

@@ -70,20 +70,20 @@ def scrape_currencies(
     if lookback_days > 0:
         results = []
         today = date.today()
-        for offset in range(lookback_days + 1):
-            requested_date = today - timedelta(days=offset)
-            for sym in symbol_names:
-                try:
-                    asset = asset_by_symbol.get(sym)
-                    if asset is None:
-                        continue
-                    base = asset.provider_config["base"]
-                    quote = asset.provider_config["quote"]
-                    data = fetch_json(
-                        f"https://api.frankfurter.app/{requested_date.isoformat()}",
-                        params={"from": base, "to": quote},
-                    )
-                    rate = data.get("rates", {}).get(quote)
+        start_date = today - timedelta(days=lookback_days)
+        for sym in symbol_names:
+            asset = asset_by_symbol.get(sym)
+            if asset is None:
+                continue
+            base = asset.provider_config["base"]
+            quote = asset.provider_config["quote"]
+            try:
+                data = fetch_json(
+                    f"https://api.frankfurter.app/{start_date.isoformat()}..{today.isoformat()}",
+                    params={"from": base, "to": quote},
+                )
+                for day_str, day_rates in data.get("rates", {}).items():
+                    rate = day_rates.get(quote)
                     if rate is not None:
                         results.append(
                             {
@@ -93,11 +93,11 @@ def scrape_currencies(
                                 "price": rate,
                                 "currency": quote,
                                 "base": base,
-                                "date": data.get("date"),
+                                "date": day_str,
                             }
                         )
-                except Exception as exc:
-                    logger.error("Failed to fetch currency %s for %s: %s", sym, requested_date, exc)
+            except Exception as exc:
+                logger.error("Failed to fetch currency %s history: %s", sym, exc)
         return results
 
     results = []

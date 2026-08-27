@@ -57,7 +57,7 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     results: Dict[str, int] = {}
 
     logger.info("Starting ingestion: crypto")
-    crypto_data = crypto.scrape_crypto_prices(lookback_days=LOOKBACK_DAYS)
+    crypto_data = crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS)
     results["crypto"] = ingest_records(db, crypto_data)
 
     logger.info("Starting ingestion: stocks")
