@@ -4,7 +4,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 
 ## Ideias
 
-- [ ] Aprimorar Logging. Execuções demoradas devem, ao menos, registrar algo em console para que facilite o tracking da execução
+- [x] Aprimorar Logging. Execuções demoradas devem, ao menos, registrar algo em console para que facilite o tracking da execução
 - [ ] Aprimorar performance da execução. Custo de tempo tem sido alto até mesmo para atualização dos tickers já existentes
 - [ ] Fragmentar tabelas: contamos com uma tabela única para a ingestão de todos os tipos de série histórica, a despeito de tipo.
       Poderia haver uma para índice, outra para ações brasileiras, e assim por diante.

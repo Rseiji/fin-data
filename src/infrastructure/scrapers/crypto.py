@@ -2,6 +2,8 @@
 import logging
 from typing import Any, Dict, Iterable, List
 
+import requests
+
 from src.infrastructure.scrapers.base import fetch_json
 from src.infrastructure.database.models import TrackedAsset
 
@@ -64,10 +66,14 @@ def scrape_crypto_prices(
             if asset is None:
                 continue
             coin_id = asset.provider_symbol
-            data = fetch_json(
-                f"{COINGECKO_BASE}/coins/{coin_id}/market_chart",
-                params={"vs_currency": "usd", "days": lookback_days},
-            )
+            try:
+                data = fetch_json(
+                    f"{COINGECKO_BASE}/coins/{coin_id}/market_chart",
+                    params={"vs_currency": "usd", "days": lookback_days},
+                )
+            except requests.RequestException as exc:
+                logger.error("Failed to fetch crypto %s: %s", sym, exc)
+                continue
             for timestamp, price in data.get("prices", []):
                 results.append(
                     {

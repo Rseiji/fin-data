@@ -1,6 +1,7 @@
 """Silver layer – parse and validate bronze records into clean quotes."""
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -106,4 +107,11 @@ def transform_symbol(db: Session, symbol: str, limit: int | None = None) -> int:
 
 def run_transformation_pipeline(db: Session, symbols: List[str]) -> Dict[str, int]:
     """Transform bronze data for a list of symbols."""
-    return {sym: transform_symbol(db, sym) for sym in symbols}
+    started_at = time.monotonic()
+    logger.info("Starting silver transformation for %d symbols", len(symbols))
+    results = {sym: transform_symbol(db, sym) for sym in symbols}
+    logger.info(
+        "Silver transformation complete: symbols=%d records=%d duration=%.2fs",
+        len(symbols), sum(results.values()), time.monotonic() - started_at,
+    )
+    return results

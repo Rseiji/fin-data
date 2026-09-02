@@ -1,5 +1,6 @@
 """APScheduler-based orchestration for automatic data ingestion."""
 import logging
+import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -29,19 +30,25 @@ def _run_stocks_pipeline():
     from src.application.transformation.transform import run_transformation_pipeline
     from src.application.aggregation.aggregate import run_aggregation_pipeline
 
-    logger.info("Stocks/ETF pipeline starting…")
+    started_at = time.monotonic()
+    logger.info("Stocks/ETF pipeline starting")
     db = SessionLocal()
     try:
         stock_assets = repositories.list_enabled_assets(db, "stock")
         etf_assets = repositories.list_enabled_assets(db, "etf")
         records = stocks.scrape_stocks(stock_assets) + stocks.scrape_etfs(etf_assets)
-        ingest_records(db, records)
+        persisted = ingest_records(db, records)
         symbols = [asset.symbol for asset in stock_assets + etf_assets]
-        run_transformation_pipeline(db, symbols)
-        run_aggregation_pipeline(db, symbols)
-        logger.info("Stocks/ETF pipeline completed")
+        silver = run_transformation_pipeline(db, symbols)
+        gold = run_aggregation_pipeline(db, symbols)
+        logger.info(
+            "Stocks/ETF pipeline completed: assets=%d fetched=%d persisted=%d "
+            "silver=%d gold=%d duration=%.2fs",
+            len(symbols), len(records), persisted, sum(silver.values()),
+            sum(gold.values()), time.monotonic() - started_at,
+        )
     except Exception as exc:
-        logger.error("Stocks/ETF pipeline failed: %s", exc)
+        logger.exception("Stocks/ETF pipeline failed: %s", exc)
     finally:
         db.close()
 
@@ -53,7 +60,8 @@ def _run_crypto_currency_pipeline():
     from src.application.transformation.transform import run_transformation_pipeline
     from src.application.aggregation.aggregate import run_aggregation_pipeline
 
-    logger.info("Crypto/currency pipeline starting…")
+    started_at = time.monotonic()
+    logger.info("Crypto/currency pipeline starting")
     db = SessionLocal()
     try:
         crypto_assets = repositories.list_enabled_assets(db, "crypto")
@@ -64,13 +72,18 @@ def _run_crypto_currency_pipeline():
             + currencies.scrape_currencies(assets=currency_assets)
             + indexes.scrape_all_indexes(assets=index_assets)
         )
-        ingest_records(db, records)
+        persisted = ingest_records(db, records)
         symbols = [asset.symbol for asset in crypto_assets + currency_assets + index_assets]
-        run_transformation_pipeline(db, symbols)
-        run_aggregation_pipeline(db, symbols)
-        logger.info("Crypto/currency pipeline completed")
+        silver = run_transformation_pipeline(db, symbols)
+        gold = run_aggregation_pipeline(db, symbols)
+        logger.info(
+            "Crypto/currency pipeline completed: assets=%d fetched=%d persisted=%d "
+            "silver=%d gold=%d duration=%.2fs",
+            len(symbols), len(records), persisted, sum(silver.values()),
+            sum(gold.values()), time.monotonic() - started_at,
+        )
     except Exception as exc:
-        logger.error("Crypto/currency pipeline failed: %s", exc)
+        logger.exception("Crypto/currency pipeline failed: %s", exc)
     finally:
         db.close()
 

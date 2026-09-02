@@ -42,6 +42,31 @@ def test_scrape_crypto_prices():
 
 
 @resp_lib.activate
+def test_scrape_crypto_prices_skips_failed_historical_asset():
+    resp_lib.add(
+        resp_lib.GET,
+        "https://api.coingecko.com/api/v3/coins/ethena/market_chart",
+        status=429,
+    )
+    resp_lib.add(
+        resp_lib.GET,
+        "https://api.coingecko.com/api/v3/coins/aave/market_chart",
+        json={"prices": [[1700000000000, 100.0]]},
+        status=200,
+    )
+
+    results = crypto.scrape_crypto_prices(
+        assets=[
+            _asset("ENA", AssetType.crypto, "ethena"),
+            _asset("AAVE", AssetType.crypto, "aave"),
+        ],
+        lookback_days=6,
+    )
+
+    assert [result["symbol"] for result in results] == ["AAVE"]
+
+
+@resp_lib.activate
 def test_scrape_bcb_series():
     mock_response = [{"data": "01/08/2024", "valor": "10.50"}]
     resp_lib.add(

@@ -1,6 +1,7 @@
 """Bronze layer ingestion – save raw scraped data to the database."""
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -54,26 +55,59 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     currency_assets = repositories.list_enabled_assets(db, "currency")
     index_assets = repositories.list_enabled_assets(db, "index")
 
+    logger.info(
+        "Ingestion assets: crypto=%d stocks=%d etfs=%d indexes=%d currencies=%d",
+        len(crypto_assets), len(stock_assets), len(etf_assets),
+        len(index_assets), len(currency_assets),
+    )
+
     results: Dict[str, int] = {}
 
     logger.info("Starting ingestion: crypto")
+    started_at = time.monotonic()
     crypto_data = crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS)
     results["crypto"] = ingest_records(db, crypto_data)
+    logger.info(
+        "Completed ingestion: crypto fetched=%d persisted=%d duration=%.2fs",
+        len(crypto_data), results["crypto"], time.monotonic() - started_at,
+    )
 
     logger.info("Starting ingestion: stocks")
+    started_at = time.monotonic()
     stock_data = stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS)
     results["stocks"] = ingest_records(db, stock_data)
+    logger.info(
+        "Completed ingestion: stocks fetched=%d persisted=%d duration=%.2fs",
+        len(stock_data), results["stocks"], time.monotonic() - started_at,
+    )
 
     logger.info("Starting ingestion: etfs")
+    started_at = time.monotonic()
     etf_data = stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS)
     results["etfs"] = ingest_records(db, etf_data)
+    logger.info(
+        "Completed ingestion: etfs fetched=%d persisted=%d duration=%.2fs",
+        len(etf_data), results["etfs"], time.monotonic() - started_at,
+    )
 
     logger.info("Starting ingestion: indexes")
+    started_at = time.monotonic()
     index_data = indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets)
     results["indexes"] = ingest_records(db, index_data)
+    logger.info(
+        "Completed ingestion: indexes fetched=%d persisted=%d duration=%.2fs",
+        len(index_data), results["indexes"], time.monotonic() - started_at,
+    )
 
     logger.info("Starting ingestion: currencies")
+    started_at = time.monotonic()
     currency_data = currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets)
     results["currencies"] = ingest_records(db, currency_data)
+    logger.info(
+        "Completed ingestion: currencies fetched=%d persisted=%d duration=%.2fs",
+        len(currency_data), results["currencies"], time.monotonic() - started_at,
+    )
+
+    logger.info("Ingestion complete: %s", results)
 
     return results

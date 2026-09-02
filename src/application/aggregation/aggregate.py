@@ -1,5 +1,6 @@
 """Gold layer – compute daily summaries from silver quotes."""
 import logging
+import time
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -91,4 +92,11 @@ def run_aggregation_pipeline(
     db: Session, symbols: List[str]
 ) -> Dict[str, int]:
     """Aggregate gold summaries for a list of symbols."""
-    return {sym: aggregate_symbol(db, sym) for sym in symbols}
+    started_at = time.monotonic()
+    logger.info("Starting gold aggregation for %d symbols", len(symbols))
+    results = {sym: aggregate_symbol(db, sym) for sym in symbols}
+    logger.info(
+        "Gold aggregation complete: symbols=%d summaries=%d duration=%.2fs",
+        len(symbols), sum(results.values()), time.monotonic() - started_at,
+    )
+    return results

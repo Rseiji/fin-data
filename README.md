@@ -10,10 +10,11 @@ Financial data collection system – scrapers, medallion-architecture data pipel
 
 | Category | Symbols | Source |
 |---|---|---|
-| Cryptocurrencies | BTCUSD, ETHUSD, BNBUSD, SOLUSD, ADAUSD | CoinGecko |
+| Cryptocurrencies | BTCUSD, ETHUSD, BNBUSD, SOLUSD, ADAUSD, ENA, HYPE, AAVE, SUI, GS, ALGN, LINK, NEAR, PENDLE, SYRUP, SPECTRA | CoinGecko |
 | Brazilian Stocks | PETR4, ITUB4, SAPR11, CEAB3, VALE3, … | Yahoo Finance |
 | ETFs | IVVB11, BOVA11, DIVO11, SMAL11, … | Yahoo Finance |
 | BR Macro Indexes | SELIC, CDI, IPCA | Banco Central do Brasil |
+| Brazilian Real Estate Index | IFIX | Banco Central do Brasil |
 | Currency Pairs | USDBRL, JPYBRL, USDEUR, BTCUSD, ETHUSD | Open ER API |
 
 ## Architecture
