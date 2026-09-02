@@ -18,6 +18,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 - [ ] API - aprimorar fluxo de versionamento e documentação
 - [ ] Backup do database (após migração para cloud)
 - [ ] UI para acompanhamento geral dos status dos dados ingeridos
+- [ ] Aprimorar o README.md e a pasta docs/
 
 
 ## Em consideração
