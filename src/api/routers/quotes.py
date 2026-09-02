@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from src.application.status.service import get_series_status
 from src.infrastructure.database.engine import get_db
 from src.infrastructure.database import repositories
 
@@ -39,6 +40,53 @@ class DailySummaryOut(BaseModel):
     computed_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SeriesStatusOut(BaseModel):
+    symbol: str
+    start_date: datetime
+    last_date: datetime
+    last_price: str
+    first_price: str
+    variance: str
+    standard_deviation: str
+    mean: str
+    granularity: str
+    record_count: int
+
+
+@router.get("/status", response_model=List[SeriesStatusOut])
+def get_series_statuses(
+    symbols: List[str] = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    statuses = []
+    missing = []
+    for symbol in symbols:
+        status = get_series_status(db, symbol)
+        if status is None:
+            missing.append(symbol.upper())
+            continue
+        statuses.append(
+            SeriesStatusOut(
+                symbol=status.symbol,
+                start_date=status.start_date,
+                last_date=status.last_date,
+                last_price=str(status.last_price),
+                first_price=str(status.first_price),
+                variance=str(status.variance),
+                standard_deviation=str(status.standard_deviation),
+                mean=str(status.mean),
+                granularity=status.granularity,
+                record_count=status.record_count,
+            )
+        )
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No historical series found for: {', '.join(missing)}",
+        )
+    return statuses
 
 
 @router.get("/{symbol}/latest", response_model=QuoteOut)

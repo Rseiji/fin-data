@@ -12,7 +12,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 - [ ] Implementação em Cloud: Host database, API. Disponibilizar como serviço interno para alimentar outros projetos pessoais
 - [ ] Mecanismo de retry/backoff
 - [ ] Mecanismos de validação de dados
-- [ ] Adicionar endpoint de status, para saber metadados a respeito de uma determinada série histórica
+- [x] Adicionar endpoint de status, para saber metadados a respeito de uma determinada série histórica
 - [ ] Health check dos dados. Identificar ativos cuja última atualização esteja muito atrasada.
 - [ ] Cache da API. Evitar consultas repetitivas ao banco para dados frequentemente solicitados (caso escale ou para fins didáticos apenas)
 - [ ] API - aprimorar fluxo de versionamento e documentação

@@ -67,7 +67,23 @@ uv run python main.py
 | GET | `/api/v1/quotes/{symbol}/latest` | Latest price for a symbol |
 | GET | `/api/v1/quotes/{symbol}/history` | Price history (filterable by date) |
 | GET | `/api/v1/quotes/{symbol}/summary` | Daily OHLC summaries |
+| GET | `/api/v1/quotes/status?symbols=PETR4&symbols=VALE3` | Historical-series metadata and statistics |
 | POST | `/api/v1/ingestion/run` | Trigger full pipeline manually |
+
+The status endpoint returns one record per requested symbol, preserving query order. It
+includes the first and last dates and prices, sample variance and standard deviation,
+arithmetic mean, inferred granularity, and record count. A symbol without historical
+records returns HTTP 404.
+
+To query the endpoint from the command line while the API is running:
+
+```bash
+uv run python scripts/series_status.py BTCUSD
+uv run python scripts/series_status.py BTCUSD ETHUSD
+```
+
+The script uses `http://localhost:8000/api/v1` by default. For another API address,
+pass `--api-url` or set `FIN_DATA_API_URL`.
 
 ## Testing
 
