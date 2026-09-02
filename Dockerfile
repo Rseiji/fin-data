@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uv", "run", "--no-sync", "python", "main.py"]
+CMD ["uv", "run", "python", "main.py"]
