@@ -34,6 +34,17 @@ def ensure_default_tracked_assets(db: Session) -> None:
         ("BNBUSD", models.AssetType.crypto, "coingecko", "binancecoin", {"vs_currency": "usd"}),
         ("SOLUSD", models.AssetType.crypto, "coingecko", "solana", {"vs_currency": "usd"}),
         ("ADAUSD", models.AssetType.crypto, "coingecko", "cardano", {"vs_currency": "usd"}),
+        ("ENA", models.AssetType.crypto, "coingecko", "ethena", {"vs_currency": "usd"}),
+        ("HYPE", models.AssetType.crypto, "coingecko", "hyperliquid", {"vs_currency": "usd"}),
+        ("AAVE", models.AssetType.crypto, "coingecko", "aave", {"vs_currency": "usd"}),
+        ("SUI", models.AssetType.crypto, "coingecko", "sui", {"vs_currency": "usd"}),
+        ("GS", models.AssetType.crypto, "coingecko", "gammaswap", {"vs_currency": "usd"}),
+        ("ALGN", models.AssetType.crypto, "coingecko", "aligned", {"vs_currency": "usd"}),
+        ("LINK", models.AssetType.crypto, "coingecko", "chainlink", {"vs_currency": "usd"}),
+        ("NEAR", models.AssetType.crypto, "coingecko", "near", {"vs_currency": "usd"}),
+        ("PENDLE", models.AssetType.crypto, "coingecko", "pendle", {"vs_currency": "usd"}),
+        ("SYRUP", models.AssetType.crypto, "coingecko", "syrup", {"vs_currency": "usd"}),
+        ("SPECTRA", models.AssetType.crypto, "coingecko", "spectra-finance", {"vs_currency": "usd"}),
         ("USDBRL", models.AssetType.currency, "open_er_api", "USD/BRL", {"base": "USD", "quote": "BRL"}),
         ("JPYBRL", models.AssetType.currency, "open_er_api", "JPY/BRL", {"base": "JPY", "quote": "BRL"}),
         ("USDEUR", models.AssetType.currency, "open_er_api", "USD/EUR", {"base": "USD", "quote": "EUR"}),
@@ -42,6 +53,7 @@ def ensure_default_tracked_assets(db: Session) -> None:
         ("SELIC", models.AssetType.index, "bcb", "432", {}),
         ("CDI", models.AssetType.index, "bcb", "12", {}),
         ("IPCA", models.AssetType.index, "bcb", "433", {}),
+        ("IFIX", models.AssetType.index, "bcb", "12472", {}),
     ]
     for symbol, asset_type, source, provider_symbol, provider_config in defaults:
         asset = db.query(models.TrackedAsset).filter_by(symbol=symbol).one_or_none()
