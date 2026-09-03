@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.application.ingestion.ingest import _build_raw_quote, ingest_records
+from src.infrastructure.database.repositories import save_raw_quotes
 
 
 def test_build_raw_quote_basic():
@@ -41,9 +42,23 @@ def test_ingest_records_calls_save(mocker):
 def test_ingest_records_handles_error(mocker):
     mock_db = MagicMock()
     mocker.patch(
-        "src.application.ingestion.ingest.repositories.save_raw_quote",
+        "src.application.ingestion.ingest.repositories.save_raw_quotes",
         side_effect=Exception("DB error"),
     )
     records = [{"symbol": "BTCUSD", "asset_type": "crypto", "source": "coingecko", "price": 45000}]
     count = ingest_records(mock_db, records)
     assert count == 0
+
+
+def test_save_raw_quotes_batches_commits():
+    mock_db = MagicMock()
+    raw_quotes = [
+        _build_raw_quote({"symbol": "BTCUSD", "asset_type": "crypto", "source": "coingecko", "price": 45000}),
+        _build_raw_quote({"symbol": "ETHUSD", "asset_type": "crypto", "source": "coingecko", "price": 3000}),
+    ]
+
+    count = save_raw_quotes(mock_db, raw_quotes, batch_size=1)
+
+    assert count == 2
+    assert mock_db.merge.call_count == 2
+    assert mock_db.commit.call_count == 2

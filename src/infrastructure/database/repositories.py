@@ -67,17 +67,28 @@ def ensure_default_tracked_assets(db: Session) -> None:
     db.commit()
 
 
+def save_raw_quotes(db: Session, raw_quotes: List[RawQuote], batch_size: int = 500) -> int:
+    """Persist a batch of raw quotes with a single commit for each batch."""
+    saved = 0
+    for start in range(0, len(raw_quotes), batch_size):
+        batch = raw_quotes[start : start + batch_size]
+        for raw_quote in batch:
+            record = models.BronzeQuote(
+                id=raw_quote.id,
+                symbol=raw_quote.symbol,
+                asset_type=raw_quote.asset_type,
+                source=raw_quote.source,
+                raw_payload=raw_quote.raw_payload,
+                ingested_at=raw_quote.ingested_at,
+            )
+            db.merge(record)
+            saved += 1
+        db.commit()
+    return saved
+
+
 def save_raw_quote(db: Session, raw_quote: RawQuote) -> None:
-    record = models.BronzeQuote(
-        id=raw_quote.id,
-        symbol=raw_quote.symbol,
-        asset_type=raw_quote.asset_type,
-        source=raw_quote.source,
-        raw_payload=raw_quote.raw_payload,
-        ingested_at=raw_quote.ingested_at,
-    )
-    db.merge(record)
-    db.commit()
+    save_raw_quotes(db, [raw_quote], batch_size=1)
 
 
 def find_raw_quotes_by_symbol(

@@ -3,8 +3,9 @@ import json
 import logging
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from sqlalchemy.orm import Session
 
@@ -27,16 +28,41 @@ def _build_raw_quote(record: Dict[str, Any]) -> RawQuote:
     )
 
 
-def ingest_records(db: Session, records: List[Dict[str, Any]]) -> int:
-    """Persist a list of raw scraped records to the bronze layer."""
-    saved = 0
+def ingest_records(
+    db: Session,
+    records: List[Dict[str, Any]],
+    *,
+    use_batch: bool = False,
+    batch_size: int = 500,
+) -> int:
+    """Persist a list of raw scraped records to the bronze layer.
+
+    By default the function preserves the original per-record save behavior for
+    compatibility with existing callers and tests. The ETL pipeline can opt into
+    the batch path to reduce SQL round-trips.
+    """
+    raw_quotes: List[RawQuote] = []
     for record in records:
         try:
-            raw = _build_raw_quote(record)
-            repositories.save_raw_quote(db, raw)
-            saved += 1
+            raw_quotes.append(_build_raw_quote(record))
         except Exception as exc:
             logger.error("Failed to ingest record %s: %s", record.get("symbol"), exc)
+
+    saved = 0
+    if use_batch and raw_quotes:
+        try:
+            saved = repositories.save_raw_quotes(db, raw_quotes, batch_size=batch_size)
+        except Exception as exc:
+            logger.error("Failed to persist %d raw quote records: %s", len(raw_quotes), exc)
+            saved = 0
+    else:
+        for raw in raw_quotes:
+            try:
+                repositories.save_raw_quote(db, raw)
+                saved += 1
+            except Exception as exc:
+                logger.error("Failed to ingest record %s: %s", raw.symbol, exc)
+
     logger.info("Ingested %d/%d records", saved, len(records))
     return saved
 
@@ -62,52 +88,41 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     )
 
     results: Dict[str, int] = {}
+    source_jobs: Dict[str, Callable[[], List[Dict[str, Any]]]] = {
+        "crypto": lambda: crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS),
+        "stocks": lambda: stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS),
+        "etfs": lambda: stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS),
+        "indexes": lambda: indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets),
+        "currencies": lambda: currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets),
+    }
 
-    logger.info("Starting ingestion: crypto")
-    started_at = time.monotonic()
-    crypto_data = crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS)
-    results["crypto"] = ingest_records(db, crypto_data)
-    logger.info(
-        "Completed ingestion: crypto fetched=%d persisted=%d duration=%.2fs",
-        len(crypto_data), results["crypto"], time.monotonic() - started_at,
-    )
-
-    logger.info("Starting ingestion: stocks")
-    started_at = time.monotonic()
-    stock_data = stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS)
-    results["stocks"] = ingest_records(db, stock_data)
-    logger.info(
-        "Completed ingestion: stocks fetched=%d persisted=%d duration=%.2fs",
-        len(stock_data), results["stocks"], time.monotonic() - started_at,
-    )
-
-    logger.info("Starting ingestion: etfs")
-    started_at = time.monotonic()
-    etf_data = stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS)
-    results["etfs"] = ingest_records(db, etf_data)
-    logger.info(
-        "Completed ingestion: etfs fetched=%d persisted=%d duration=%.2fs",
-        len(etf_data), results["etfs"], time.monotonic() - started_at,
-    )
-
-    logger.info("Starting ingestion: indexes")
-    started_at = time.monotonic()
-    index_data = indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets)
-    results["indexes"] = ingest_records(db, index_data)
-    logger.info(
-        "Completed ingestion: indexes fetched=%d persisted=%d duration=%.2fs",
-        len(index_data), results["indexes"], time.monotonic() - started_at,
-    )
-
-    logger.info("Starting ingestion: currencies")
-    started_at = time.monotonic()
-    currency_data = currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets)
-    results["currencies"] = ingest_records(db, currency_data)
-    logger.info(
-        "Completed ingestion: currencies fetched=%d persisted=%d duration=%.2fs",
-        len(currency_data), results["currencies"], time.monotonic() - started_at,
-    )
+    with ThreadPoolExecutor(max_workers=min(5, len(source_jobs))) as executor:
+        future_map = {
+            executor.submit(_fetch_source_data, source_name, fetch_fn): source_name
+            for source_name, fetch_fn in source_jobs.items()
+        }
+        for future in future_map:
+            source_name = future_map[future]
+            try:
+                fetched = future.result()
+                logger.info("Starting ingestion: %s", source_name)
+                started_at = time.monotonic()
+                results[source_name] = ingest_records(db, fetched, use_batch=True)
+                logger.info(
+                    "Completed ingestion: %s fetched=%d persisted=%d duration=%.2fs",
+                    source_name, len(fetched), results[source_name], time.monotonic() - started_at,
+                )
+            except Exception as exc:
+                logger.exception("Failed to ingest source %s: %s", source_name, exc)
+                results[source_name] = 0
 
     logger.info("Ingestion complete: %s", results)
-
     return results
+
+
+def _fetch_source_data(source_name: str, fetch_fn: Callable[[], List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    logger.info("Fetching source data: %s", source_name)
+    started_at = time.monotonic()
+    fetched = fetch_fn()
+    logger.info("Fetched source %s in %.2fs (%d records)", source_name, time.monotonic() - started_at, len(fetched))
+    return fetched
