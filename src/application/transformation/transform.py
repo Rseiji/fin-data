@@ -85,16 +85,24 @@ def _raw_to_quote(raw: RawQuote) -> Optional[Quote]:
 
 
 def transform_symbol(db: Session, symbol: str, limit: int | None = None) -> int:
-    """Transform all bronze records for a symbol into silver quotes.
-
-    Passing None means no artificial cap on the number of records processed,
-    which is required for full historical backfills.
-    """
+    """Transform only bronze records newer than the latest silver quote for the symbol."""
+    latest_quote = repositories.find_latest_quote(db, symbol)
     raw_quotes = repositories.find_raw_quotes_by_symbol(db, symbol, limit=limit)
+
+    if latest_quote is not None:
+        raw_quotes = [
+            raw
+            for raw in raw_quotes
+            if _first_non_none_timestamp(json.loads(raw.raw_payload) if raw.raw_payload else {}) is None
+            or _first_non_none_timestamp(json.loads(raw.raw_payload) if raw.raw_payload else {}) > latest_quote.quote_date
+        ]
+
     saved = 0
     for raw in raw_quotes:
         quote = _raw_to_quote(raw)
         if quote is None:
+            continue
+        if latest_quote is not None and quote.quote_date <= latest_quote.quote_date:
             continue
         try:
             repositories.save_quote(db, quote)

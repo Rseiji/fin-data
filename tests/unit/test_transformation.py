@@ -5,8 +5,13 @@ from decimal import Decimal
 
 import pytest
 
-from src.application.transformation.transform import _parse_price, _parse_timestamp, _raw_to_quote
-from src.domain.entities.quote import RawQuote
+from src.application.transformation.transform import (
+    _parse_price,
+    _parse_timestamp,
+    _raw_to_quote,
+    transform_symbol,
+)
+from src.domain.entities.quote import Quote, RawQuote
 
 
 def _make_raw(payload: dict, symbol: str = "BTCUSD", asset_type: str = "crypto") -> RawQuote:
@@ -87,3 +92,26 @@ def test_raw_to_quote_bad_json():
     )
     quote = _raw_to_quote(raw)
     assert quote is None
+
+
+def test_transform_symbol_skips_old_records(mocker):
+    latest = Quote(
+        id="latest-id",
+        bronze_id="old-b",
+        symbol="BTCUSD",
+        asset_type="crypto",
+        price=Decimal("100"),
+        currency="USD",
+        quote_date=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        source="coingecko",
+    )
+    old_raw = _make_raw({"price": 90, "timestamp": 1704153600}, symbol="BTCUSD")
+    new_raw = _make_raw({"price": 110, "timestamp": 1704240000}, symbol="BTCUSD")
+    mocker.patch("src.application.transformation.transform.repositories.find_latest_quote", return_value=latest)
+    mocker.patch("src.application.transformation.transform.repositories.find_raw_quotes_by_symbol", return_value=[old_raw, new_raw])
+    save_quote = mocker.patch("src.application.transformation.transform.repositories.save_quote")
+
+    count = transform_symbol(mocker.Mock(), "BTCUSD")
+
+    assert count == 1
+    assert save_quote.call_count == 1

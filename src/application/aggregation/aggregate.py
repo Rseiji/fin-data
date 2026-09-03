@@ -63,7 +63,11 @@ def aggregate_symbol(
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> int:
-    """Compute and save daily summaries for a symbol."""
+    """Compute and save daily summaries only for dates newer than the last saved summary."""
+    latest_summary = repositories.find_latest_daily_summary(db, symbol)
+    if start is None and latest_summary is not None:
+        start = latest_summary.trade_date
+
     quotes = repositories.find_quotes_by_symbol(db, symbol, start=start, end=end)
     if not quotes:
         logger.warning("No silver quotes found for %s", symbol)
@@ -72,6 +76,9 @@ def aggregate_symbol(
     grouped = _group_by_date(quotes)
     saved = 0
     for date_str, day_quotes in grouped.items():
+        trade_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if latest_summary is not None and trade_date <= latest_summary.trade_date:
+            continue
         summary = _compute_daily_summary(
             symbol=symbol,
             asset_type=day_quotes[0].asset_type,

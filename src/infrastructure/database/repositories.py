@@ -182,6 +182,30 @@ def find_latest_quote(db: Session, symbol: str) -> Optional[Quote]:
     )
 
 
+def find_latest_daily_summary(db: Session, symbol: str) -> Optional[DailySummary]:
+    row = (
+        db.query(models.GoldDailySummary)
+        .filter(models.GoldDailySummary.symbol == symbol)
+        .order_by(models.GoldDailySummary.trade_date.desc())
+        .first()
+    )
+    if not row:
+        return None
+    return DailySummary(
+        id=row.id,
+        symbol=row.symbol,
+        asset_type=row.asset_type.value,
+        trade_date=row.trade_date,
+        open_price=Decimal(str(row.open_price)) if row.open_price else None,
+        close_price=Decimal(str(row.close_price)) if row.close_price else None,
+        high_price=Decimal(str(row.high_price)) if row.high_price else None,
+        low_price=Decimal(str(row.low_price)) if row.low_price else None,
+        pct_change=Decimal(str(row.pct_change)) if row.pct_change else None,
+        currency=row.currency,
+        computed_at=row.computed_at,
+    )
+
+
 def save_daily_summary(db: Session, summary: DailySummary) -> None:
     record = db.query(models.GoldDailySummary).filter_by(
         symbol=summary.symbol, trade_date=summary.trade_date

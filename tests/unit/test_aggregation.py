@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.application.aggregation.aggregate import _compute_daily_summary, _group_by_date
+from src.application.aggregation.aggregate import _compute_daily_summary, _group_by_date, aggregate_symbol
 from src.domain.entities.quote import Quote
 
 
@@ -45,3 +45,17 @@ def test_compute_daily_summary():
     assert summary.low_price == Decimal("100")
     assert summary.pct_change is not None
     assert abs(float(summary.pct_change) - 5.0) < 0.001
+
+
+def test_aggregate_symbol_skips_old_dates(mocker):
+    latest_trade = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    old_quote = _make_quote(100, datetime(2024, 1, 1, 10, tzinfo=timezone.utc), symbol="BTCUSD")
+    new_quote = _make_quote(110, datetime(2024, 1, 3, 10, tzinfo=timezone.utc), symbol="BTCUSD")
+    mocker.patch("src.application.aggregation.aggregate.repositories.find_latest_daily_summary", return_value=type("Summary", (), {"trade_date": latest_trade})())
+    mocker.patch("src.application.aggregation.aggregate.repositories.find_quotes_by_symbol", return_value=[old_quote, new_quote])
+    save_summary = mocker.patch("src.application.aggregation.aggregate.repositories.save_daily_summary")
+
+    count = aggregate_symbol(mocker.Mock(), "BTCUSD")
+
+    assert count == 1
+    assert save_summary.call_count == 1
