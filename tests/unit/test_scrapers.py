@@ -103,6 +103,29 @@ def test_scrape_currency_pair():
     assert result["currency"] == "BRL"
 
 
+@resp_lib.activate
+def test_scrape_currencies_broadcasts_same_base_in_one_call():
+    mock_response = {
+        "rates": {"BRL": 5.0, "EUR": 0.92},
+        "time_last_update_utc": "Mon, 01 Jan 2024 00:00:00 +0000",
+    }
+    resp_lib.add(
+        resp_lib.GET,
+        "https://open.er-api.com/v6/latest/USD",
+        json=mock_response,
+        status=200,
+    )
+
+    results = currencies.scrape_currencies(assets=[
+        _asset("USDBRL", AssetType.currency, "USD/BRL", {"base": "USD", "quote": "BRL"}),
+        _asset("USDEUR", AssetType.currency, "USD/EUR", {"base": "USD", "quote": "EUR"}),
+    ])
+
+    assert len(results) == 2
+    assert len(resp_lib.calls) == 1
+    assert {r["symbol"] for r in results} == {"USDBRL", "USDEUR"}
+
+
 def test_scrape_unknown_currency_pair():
     with pytest.raises(KeyError):
         currencies.scrape_currency_pair(

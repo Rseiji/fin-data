@@ -60,7 +60,11 @@ def scrape_currencies(
     assets: Iterable[TrackedAsset] | None = None,
     lookback_by_symbol: Dict[str, int] | None = None,
 ) -> List[Dict[str, Any]]:
-    """Scrape a list of currency pairs."""
+    """Scrape a list of currency pairs.
+
+    When multiple symbols share the same base currency, fetch the base once and
+    expand the results per symbol. This avoids redundant requests for the same base.
+    """
     if assets is not None:
         symbols = list(assets)
     if symbols is None:
@@ -71,53 +75,70 @@ def scrape_currencies(
     if lookback_days > 0:
         results = []
         today = date.today()
+        grouped_by_base: Dict[str, List[str]] = {}
         for sym in symbol_names:
             asset = asset_by_symbol.get(sym)
             if asset is None:
                 continue
-            base = asset.provider_config["base"]
-            quote = asset.provider_config["quote"]
-            symbol_lookback = (lookback_by_symbol or {}).get(sym, lookback_days)
-            start_date = today - timedelta(days=max(1, symbol_lookback))
+            grouped_by_base.setdefault(asset.provider_config["base"], []).append(sym)
+
+        for base, base_symbols in grouped_by_base.items():
+            quote_symbols = [asset_by_symbol[sym].provider_config["quote"] for sym in base_symbols]
             try:
                 data = fetch_json(
-                    f"https://api.frankfurter.app/{start_date.isoformat()}..{today.isoformat()}",
-                    params={"from": base, "to": quote},
+                    f"https://api.frankfurter.app/{(today - timedelta(days=max(1, max((lookback_by_symbol or {}).get(sym, lookback_days) for sym in base_symbols)))).isoformat()}..{today.isoformat()}",
+                    params={"from": base, "to": ",".join(quote_symbols)},
                 )
-                for day_str, day_rates in data.get("rates", {}).items():
-                    rate = day_rates.get(quote)
-                    if rate is not None:
-                        results.append(
-                            {
-                                "symbol": sym.upper(),
-                                "asset_type": "currency",
-                                "source": "frankfurter",
-                                "price": rate,
-                                "currency": quote,
-                                "base": base,
-                                "date": day_str,
-                            }
-                        )
+                for sym in base_symbols:
+                    quote = asset_by_symbol[sym].provider_config["quote"]
+                    for day_str, day_rates in data.get("rates", {}).items():
+                        rate = day_rates.get(quote)
+                        if rate is not None:
+                            results.append(
+                                {
+                                    "symbol": sym.upper(),
+                                    "asset_type": "currency",
+                                    "source": "frankfurter",
+                                    "price": rate,
+                                    "currency": quote,
+                                    "base": base,
+                                    "date": day_str,
+                                }
+                            )
             except Exception as exc:
-                logger.error("Failed to fetch currency %s history: %s", sym, exc)
+                logger.error("Failed to fetch currency history for base %s: %s", base, exc)
         return results
 
     results = []
+    grouped_by_base: Dict[str, List[str]] = {}
     for sym in symbol_names:
+        asset = asset_by_symbol.get(sym)
+        if asset is None:
+            continue
+        grouped_by_base.setdefault(asset.provider_config["base"], []).append(sym)
+
+    for base, base_symbols in grouped_by_base.items():
         try:
-            asset = asset_by_symbol.get(sym)
-            if asset is None:
-                continue
-            base = asset.provider_config["base"]
-            quote = asset.provider_config["quote"]
             data = fetch_json(OPEN_RATES_URL.format(base=base))
-            rate = data.get("rates", {}).get(quote)
-            if rate is None:
-                raise ValueError(f"Rate {quote} not found in response for base {base}")
-            results.append({"symbol": sym.upper(), "asset_type": "currency", "source": asset.source,
-                            "price": rate, "currency": quote, "base": base,
-                            "last_updated": data.get("time_last_update_utc")})
-            logger.info("Fetched currency %s", sym)
+            rates = data.get("rates", {})
+            for sym in base_symbols:
+                asset = asset_by_symbol.get(sym)
+                if asset is None:
+                    continue
+                quote = asset.provider_config["quote"]
+                rate = rates.get(quote)
+                if rate is None:
+                    raise ValueError(f"Rate {quote} not found in response for base {base}")
+                results.append({
+                    "symbol": sym.upper(),
+                    "asset_type": "currency",
+                    "source": asset.source,
+                    "price": rate,
+                    "currency": quote,
+                    "base": base,
+                    "last_updated": data.get("time_last_update_utc"),
+                })
+                logger.info("Fetched currency %s", sym)
         except Exception as exc:
-            logger.error("Failed to fetch currency %s: %s", sym, exc)
+            logger.error("Failed to fetch currency base %s: %s", base, exc)
     return results
