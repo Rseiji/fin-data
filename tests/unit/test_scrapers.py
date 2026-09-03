@@ -67,6 +67,47 @@ def test_scrape_crypto_prices_skips_failed_historical_asset():
 
 
 @resp_lib.activate
+def test_scrape_binance_daily_history():
+    resp_lib.add(
+        resp_lib.GET,
+        "https://api.binance.com/api/v3/klines",
+        json=[[1704067200000, "10.0", "12.0", "9.0", "11.5", "100", 1704153599999]],
+        status=200,
+    )
+
+    results = crypto.scrape_crypto_prices(
+        assets=[_asset("NEAR", AssetType.crypto, "NEARUSDT", source="binance")],
+        lookback_days=1,
+    )
+
+    assert results == [{
+        "symbol": "NEAR",
+        "asset_type": "crypto",
+        "source": "binance",
+        "price": 11.5,
+        "currency": "USDT",
+        "timestamp": 1704067200.0,
+    }]
+
+
+@resp_lib.activate
+def test_scrape_binance_latest_price():
+    resp_lib.add(
+        resp_lib.GET,
+        "https://api.binance.com/api/v3/ticker/price",
+        json={"symbol": "NEARUSDT", "price": "11.5"},
+        status=200,
+    )
+
+    results = crypto.scrape_crypto_prices(
+        assets=[_asset("NEAR", AssetType.crypto, "NEARUSDT", source="binance")]
+    )
+
+    assert results[0]["price"] == 11.5
+    assert results[0]["source"] == "binance"
+
+
+@resp_lib.activate
 def test_scrape_bcb_series():
     mock_response = [{"data": "01/08/2024", "valor": "10.50"}]
     resp_lib.add(

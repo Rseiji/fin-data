@@ -41,7 +41,7 @@ def ensure_default_tracked_assets(db: Session) -> None:
         ("GS", models.AssetType.crypto, "coingecko", "gammaswap", {"vs_currency": "usd"}),
         ("ALGN", models.AssetType.crypto, "coingecko", "aligned", {"vs_currency": "usd"}),
         ("LINK", models.AssetType.crypto, "coingecko", "chainlink", {"vs_currency": "usd"}),
-        ("NEAR", models.AssetType.crypto, "coingecko", "near", {"vs_currency": "usd"}),
+        ("NEAR", models.AssetType.crypto, "binance", "NEARUSDT", {"interval": "1d"}),
         ("PENDLE", models.AssetType.crypto, "coingecko", "pendle", {"vs_currency": "usd"}),
         ("SYRUP", models.AssetType.crypto, "coingecko", "syrup", {"vs_currency": "usd"}),
         ("SPECTRA", models.AssetType.crypto, "coingecko", "spectra-finance", {"vs_currency": "usd"}),
