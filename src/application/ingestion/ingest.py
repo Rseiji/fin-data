@@ -13,6 +13,21 @@ from src.domain.entities.quote import RawQuote
 from src.infrastructure.database import repositories
 from src.config.settings import settings
 
+
+def resolve_symbol_lookback_days(db: Session, symbol: str, default_days: int) -> int:
+    """Return the lookback window for a symbol based on its latest stored data."""
+    latest = repositories.find_latest_quote(db, symbol)
+    if latest is None:
+        return max(1, default_days)
+
+    now = datetime.now(tz=timezone.utc)
+    elapsed = max((now - latest.quote_date).total_seconds(), 0)
+    if elapsed <= 0:
+        return 1
+
+    days_since = max(1, int(elapsed // 86400) + 1)
+    return min(max(1, default_days), days_since)
+
 logger = logging.getLogger(__name__)
 LOOKBACK_DAYS = settings.ingestion_lookback_days
 
@@ -81,6 +96,12 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
     currency_assets = repositories.list_enabled_assets(db, "currency")
     index_assets = repositories.list_enabled_assets(db, "index")
 
+    stock_lookbacks = {asset.symbol: resolve_symbol_lookback_days(db, asset.symbol, LOOKBACK_DAYS) for asset in stock_assets}
+    etf_lookbacks = {asset.symbol: resolve_symbol_lookback_days(db, asset.symbol, LOOKBACK_DAYS) for asset in etf_assets}
+    crypto_lookbacks = {asset.symbol: resolve_symbol_lookback_days(db, asset.symbol, LOOKBACK_DAYS) for asset in crypto_assets}
+    currency_lookbacks = {asset.symbol: resolve_symbol_lookback_days(db, asset.symbol, LOOKBACK_DAYS) for asset in currency_assets}
+    index_lookbacks = {asset.symbol: resolve_symbol_lookback_days(db, asset.symbol, LOOKBACK_DAYS) for asset in index_assets}
+
     logger.info(
         "Ingestion assets: crypto=%d stocks=%d etfs=%d indexes=%d currencies=%d",
         len(crypto_assets), len(stock_assets), len(etf_assets),
@@ -89,11 +110,11 @@ def run_ingestion_pipeline(db: Session) -> Dict[str, int]:
 
     results: Dict[str, int] = {}
     source_jobs: Dict[str, Callable[[], List[Dict[str, Any]]]] = {
-        "crypto": lambda: crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS),
-        "stocks": lambda: stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS),
-        "etfs": lambda: stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS),
-        "indexes": lambda: indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets),
-        "currencies": lambda: currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets),
+        "crypto": lambda: crypto.scrape_crypto_prices(assets=crypto_assets, lookback_days=LOOKBACK_DAYS, lookback_by_symbol=crypto_lookbacks),
+        "stocks": lambda: stocks.scrape_stocks(stock_assets, lookback_days=LOOKBACK_DAYS, lookback_by_symbol=stock_lookbacks),
+        "etfs": lambda: stocks.scrape_etfs(etf_assets, lookback_days=LOOKBACK_DAYS, lookback_by_symbol=etf_lookbacks),
+        "indexes": lambda: indexes.scrape_all_indexes(lookback_days=LOOKBACK_DAYS, assets=index_assets, lookback_by_symbol=index_lookbacks),
+        "currencies": lambda: currencies.scrape_currencies(lookback_days=LOOKBACK_DAYS, assets=currency_assets, lookback_by_symbol=currency_lookbacks),
     }
 
     with ThreadPoolExecutor(max_workers=min(5, len(source_jobs))) as executor:

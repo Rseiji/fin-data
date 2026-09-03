@@ -37,6 +37,7 @@ def scrape_crypto_prices(
     symbols: Iterable[str | TrackedAsset] | None = None,
     lookback_days: int = 0,
     assets: Iterable[TrackedAsset] | None = None,
+    lookback_by_symbol: Dict[str, int] | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Fetch current prices from CoinGecko.
@@ -66,10 +67,11 @@ def scrape_crypto_prices(
             if asset is None:
                 continue
             coin_id = asset.provider_symbol
+            symbol_lookback = (lookback_by_symbol or {}).get(sym, lookback_days)
             try:
                 data = fetch_json(
                     f"{COINGECKO_BASE}/coins/{coin_id}/market_chart",
-                    params={"vs_currency": "usd", "days": lookback_days},
+                    params={"vs_currency": "usd", "days": max(1, symbol_lookback)},
                 )
             except requests.RequestException as exc:
                 logger.error("Failed to fetch crypto %s: %s", sym, exc)

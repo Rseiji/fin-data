@@ -137,41 +137,51 @@ def scrape_etf_quote(symbol: str | TrackedAsset) -> Dict[str, Any]:
 
 
 def scrape_stocks(
-    symbols: Iterable[str | TrackedAsset] | None = None, lookback_days: int = 0
+    symbols: Iterable[str | TrackedAsset] | None = None,
+    lookback_days: int = 0,
+    lookback_by_symbol: Dict[str, int] | None = None,
 ) -> List[Dict[str, Any]]:
     """Scrape the supplied list of stock symbols."""
     if symbols is None:
         raise ValueError("symbols must be provided; load tracked assets from the database")
     results = []
+    per_symbol_lookbacks = lookback_by_symbol or {}
     for sym in symbols:
+        symbol_name = _asset_symbol(sym)
+        symbol_lookback = per_symbol_lookbacks.get(symbol_name, lookback_days)
         try:
-            if lookback_days > 0:
-                results.extend(scrape_b3_history(sym, lookback_days))
+            if symbol_lookback > 0:
+                results.extend(scrape_b3_history(sym, symbol_lookback))
             else:
                 results.append(scrape_b3_quote(sym))
-            logger.info("Fetched stock %s", sym)
+            logger.info("Fetched stock %s with lookback=%s", sym, symbol_lookback)
         except Exception as exc:
             logger.error("Failed to fetch stock %s: %s", sym, exc)
     return results
 
 
 def scrape_etfs(
-    symbols: Iterable[str | TrackedAsset] | None = None, lookback_days: int = 0
+    symbols: Iterable[str | TrackedAsset] | None = None,
+    lookback_days: int = 0,
+    lookback_by_symbol: Dict[str, int] | None = None,
 ) -> List[Dict[str, Any]]:
     """Scrape the supplied list of ETF symbols."""
     if symbols is None:
         raise ValueError("symbols must be provided; load tracked assets from the database")
     results = []
+    per_symbol_lookbacks = lookback_by_symbol or {}
     for sym in symbols:
+        symbol_name = _asset_symbol(sym)
+        symbol_lookback = per_symbol_lookbacks.get(symbol_name, lookback_days)
         try:
-            if lookback_days > 0:
-                history = scrape_b3_history(sym, lookback_days)
+            if symbol_lookback > 0:
+                history = scrape_b3_history(sym, symbol_lookback)
                 for record in history:
                     record["asset_type"] = "etf"
                 results.extend(history)
             else:
                 results.append(scrape_etf_quote(sym))
-            logger.info("Fetched ETF %s", sym)
+            logger.info("Fetched ETF %s with lookback=%s", sym, symbol_lookback)
         except Exception as exc:
             logger.error("Failed to fetch ETF %s: %s", sym, exc)
     return results

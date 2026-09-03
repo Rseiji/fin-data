@@ -27,7 +27,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 
 - [x] Concorrência por fonte nas etapas de fetch para reduzir tempo total de ingestão
 - [x] Persistência em lote (batch) para registros de bronze, evitando commits por item
-- [ ] Atualização incremental por símbolo com base no último timestamp/última data processada
+- [x] Atualização incremental por símbolo com base no último timestamp/última data processada
 - [ ] Broadcast de requisições para APIs que suportem múltiplos ativos em uma única chamada
 - [ ] Reduzir lookback em atualizações normais, mantendo backfill como operação explícita
 - [ ] Reusar conexões HTTP / reduzir overhead de requests repetitivos

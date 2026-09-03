@@ -58,6 +58,7 @@ def scrape_currencies(
     symbols: Iterable[str | TrackedAsset] | None = None,
     lookback_days: int = 0,
     assets: Iterable[TrackedAsset] | None = None,
+    lookback_by_symbol: Dict[str, int] | None = None,
 ) -> List[Dict[str, Any]]:
     """Scrape a list of currency pairs."""
     if assets is not None:
@@ -70,13 +71,14 @@ def scrape_currencies(
     if lookback_days > 0:
         results = []
         today = date.today()
-        start_date = today - timedelta(days=lookback_days)
         for sym in symbol_names:
             asset = asset_by_symbol.get(sym)
             if asset is None:
                 continue
             base = asset.provider_config["base"]
             quote = asset.provider_config["quote"]
+            symbol_lookback = (lookback_by_symbol or {}).get(sym, lookback_days)
+            start_date = today - timedelta(days=max(1, symbol_lookback))
             try:
                 data = fetch_json(
                     f"https://api.frankfurter.app/{start_date.isoformat()}..{today.isoformat()}",
