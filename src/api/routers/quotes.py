@@ -13,6 +13,14 @@ from src.infrastructure.database import repositories
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 
+def _validate_date_range(start: Optional[datetime], end: Optional[datetime]) -> None:
+    if start and end and start > end:
+        raise HTTPException(
+            status_code=400,
+            detail="start date must be earlier than or equal to end date",
+        )
+
+
 class QuoteOut(BaseModel):
     id: str
     symbol: str
@@ -113,6 +121,7 @@ def get_quote_history(
     end: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
 ):
+    _validate_date_range(start, end)
     quotes = repositories.find_quotes_by_symbol(db, symbol.upper(), start=start, end=end)
     return [
         QuoteOut(
@@ -136,6 +145,7 @@ def get_daily_summary(
     end: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
 ):
+    _validate_date_range(start, end)
     summaries = repositories.find_daily_summaries(db, symbol.upper(), start=start, end=end)
     return [
         DailySummaryOut(

@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from src.domain.entities.quote import DailySummary, Quote, RawQuote
@@ -29,21 +30,21 @@ def ensure_default_tracked_assets(db: Session) -> None:
         *[(symbol, models.AssetType.etf, "yahoo_finance", f"{symbol}.SA", {}) for symbol in (
             "IVVB11", "BOVA11", "DIVO11", "SMAL11", "XFIX11"
         )],
-        ("BTCUSD", models.AssetType.crypto, "coingecko", "bitcoin", {"vs_currency": "usd"}),
-        ("ETHUSD", models.AssetType.crypto, "coingecko", "ethereum", {"vs_currency": "usd"}),
+        ("BTCUSD", models.AssetType.crypto, "binance", "BTCUSDT", {"interval": "1d"}),
+        ("ETHUSD", models.AssetType.crypto, "binance", "ETHUSDT", {"interval": "1d"}),
         ("BNBUSD", models.AssetType.crypto, "coingecko", "binancecoin", {"vs_currency": "usd"}),
-        ("SOLUSD", models.AssetType.crypto, "coingecko", "solana", {"vs_currency": "usd"}),
+        ("SOLUSD", models.AssetType.crypto, "binance", "SOLUSDT", {"interval": "1d"}),
         ("ADAUSD", models.AssetType.crypto, "coingecko", "cardano", {"vs_currency": "usd"}),
-        ("ENA", models.AssetType.crypto, "coingecko", "ethena", {"vs_currency": "usd"}),
+        ("ENA", models.AssetType.crypto, "binance", "ENAUSDT", {"interval": "1d"}),
         ("HYPE", models.AssetType.crypto, "coingecko", "hyperliquid", {"vs_currency": "usd"}),
-        ("AAVE", models.AssetType.crypto, "coingecko", "aave", {"vs_currency": "usd"}),
-        ("SUI", models.AssetType.crypto, "coingecko", "sui", {"vs_currency": "usd"}),
+        ("AAVE", models.AssetType.crypto, "binance", "AAVEUSDT", {"interval": "1d"}),
+        ("SUI", models.AssetType.crypto, "binance", "SUIUSDT", {"interval": "1d"}),
         ("GS", models.AssetType.crypto, "coingecko", "gammaswap", {"vs_currency": "usd"}),
         ("ALGN", models.AssetType.crypto, "coingecko", "aligned", {"vs_currency": "usd"}),
-        ("LINK", models.AssetType.crypto, "coingecko", "chainlink", {"vs_currency": "usd"}),
+        ("LINK", models.AssetType.crypto, "binance", "LINKUSDT", {"interval": "1d"}),
         ("NEAR", models.AssetType.crypto, "binance", "NEARUSDT", {"interval": "1d"}),
-        ("PENDLE", models.AssetType.crypto, "coingecko", "pendle", {"vs_currency": "usd"}),
-        ("SYRUP", models.AssetType.crypto, "coingecko", "syrup", {"vs_currency": "usd"}),
+        ("PENDLE", models.AssetType.crypto, "binance", "PENDLEUSDT", {"interval": "1d"}),
+        ("SYRUP", models.AssetType.crypto, "binance", "SYRUPUSDT", {"interval": "1d"}),
         ("SPECTRA", models.AssetType.crypto, "coingecko", "spectra-finance", {"vs_currency": "usd"}),
         ("USDBRL", models.AssetType.currency, "open_er_api", "USD/BRL", {"base": "USD", "quote": "BRL"}),
         ("JPYBRL", models.AssetType.currency, "open_er_api", "JPY/BRL", {"base": "JPY", "quote": "BRL"}),
@@ -130,6 +131,39 @@ def save_quote(db: Session, quote: Quote) -> None:
     record.source = quote.source
     record.processed_at = quote.processed_at
     db.commit()
+
+
+def save_quotes(db: Session, quotes: List[Quote]) -> int:
+    """Persist quotes with one PostgreSQL upsert statement and one commit."""
+    if not quotes:
+        return 0
+    values = [
+        {
+            "id": quote.id,
+            "bronze_id": quote.bronze_id,
+            "symbol": quote.symbol,
+            "asset_type": quote.asset_type,
+            "price": quote.price,
+            "currency": quote.currency,
+            "quote_date": quote.quote_date,
+            "source": quote.source,
+            "processed_at": quote.processed_at,
+        }
+        for quote in quotes
+    ]
+    statement = insert(models.SilverQuote).values(values)
+    statement = statement.on_conflict_do_update(
+        constraint="uq_silver_symbol_date_source",
+        set_={
+            "bronze_id": statement.excluded.bronze_id,
+            "price": statement.excluded.price,
+            "currency": statement.excluded.currency,
+            "processed_at": statement.excluded.processed_at,
+        },
+    )
+    db.execute(statement)
+    db.commit()
+    return len(quotes)
 
 
 def find_quotes_by_symbol(

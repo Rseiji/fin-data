@@ -84,7 +84,12 @@ def _raw_to_quote(raw: RawQuote) -> Optional[Quote]:
     )
 
 
-def transform_symbol(db: Session, symbol: str, limit: int | None = None) -> int:
+def transform_symbol(
+    db: Session,
+    symbol: str,
+    limit: int | None = None,
+    use_batch: bool = False,
+) -> int:
     """Transform only bronze records newer than the latest silver quote for the symbol."""
     latest_quote = repositories.find_latest_quote(db, symbol)
     raw_quotes = repositories.find_raw_quotes_by_symbol(db, symbol, limit=limit)
@@ -97,27 +102,39 @@ def transform_symbol(db: Session, symbol: str, limit: int | None = None) -> int:
             or _first_non_none_timestamp(json.loads(raw.raw_payload) if raw.raw_payload else {}) > latest_quote.quote_date
         ]
 
-    saved = 0
+    quotes: List[Quote] = []
     for raw in raw_quotes:
         quote = _raw_to_quote(raw)
         if quote is None:
             continue
         if latest_quote is not None and quote.quote_date <= latest_quote.quote_date:
             continue
+        quotes.append(quote)
+
+    saved = 0
+    if use_batch and quotes:
         try:
-            repositories.save_quote(db, quote)
-            saved += 1
+            saved = repositories.save_quotes(db, quotes)
         except Exception as exc:
-            logger.error("Failed to save silver quote from %s: %s", raw.id, exc)
+            logger.error("Failed to save %d silver quotes for %s: %s", len(quotes), symbol, exc)
+    else:
+        for quote in quotes:
+            try:
+                repositories.save_quote(db, quote)
+                saved += 1
+            except Exception as exc:
+                logger.error("Failed to save silver quote from %s: %s", quote.bronze_id, exc)
     logger.info("Transformed %d/%d records for %s", saved, len(raw_quotes), symbol)
     return saved
 
 
-def run_transformation_pipeline(db: Session, symbols: List[str]) -> Dict[str, int]:
+def run_transformation_pipeline(
+    db: Session, symbols: List[str], use_batch: bool = False
+) -> Dict[str, int]:
     """Transform bronze data for a list of symbols."""
     started_at = time.monotonic()
     logger.info("Starting silver transformation for %d symbols", len(symbols))
-    results = {sym: transform_symbol(db, sym) for sym in symbols}
+    results = {sym: transform_symbol(db, sym, use_batch=use_batch) for sym in symbols}
     logger.info(
         "Silver transformation complete: symbols=%d records=%d duration=%.2fs",
         len(symbols), sum(results.values()), time.monotonic() - started_at,

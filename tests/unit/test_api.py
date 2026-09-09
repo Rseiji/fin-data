@@ -67,6 +67,22 @@ def test_quote_history(client, mocker):
     assert resp.json() == []
 
 
+def test_quote_history_invalid_date_range_returns_400(client):
+    resp = client.get(
+        "/api/v1/quotes/BTCUSD/history?start=2024-02-02T00:00:00&end=2024-01-01T00:00:00"
+    )
+    assert resp.status_code == 400
+    assert "start" in resp.json()["detail"].lower()
+
+
+def test_daily_summary_invalid_date_range_returns_400(client):
+    resp = client.get(
+        "/api/v1/quotes/BTCUSD/summary?start=2024-02-02T00:00:00&end=2024-01-01T00:00:00"
+    )
+    assert resp.status_code == 400
+    assert "start" in resp.json()["detail"].lower()
+
+
 def test_series_status_preserves_requested_order(client, mocker):
     def find_quotes(_db, symbol, start=None, end=None):
         quotes = {

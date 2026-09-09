@@ -75,9 +75,9 @@ def run_initial_load(symbols: List[str], source: str, days: int, reset: bool = F
             _clear_symbols(db, symbols)
 
         records = _fetch_records(db, source=source, symbols=symbols, days=days)
-        bronze_count = ingest_records(db, records)
+        bronze_count = ingest_records(db, records, use_batch=True)
 
-        transformed = run_transformation_pipeline(db, symbols)
+        transformed = run_transformation_pipeline(db, symbols, use_batch=True)
         aggregated = run_aggregation_pipeline(db, symbols)
 
         return {
