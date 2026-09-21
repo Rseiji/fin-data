@@ -2,7 +2,7 @@
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.infrastructure.database.engine import get_db
@@ -15,12 +15,29 @@ router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 
 class IngestionResult(BaseModel):
-    ingested: Dict[str, int]
-    transformed: Dict[str, int]
-    aggregated: Dict[str, int]
+    ingested: Dict[str, int] = Field(
+        description="Number of records ingested for each symbol."
+    )
+    transformed: Dict[str, int] = Field(
+        description="Number of records transformed for each symbol."
+    )
+    aggregated: Dict[str, int] = Field(
+        description="Number of daily summaries aggregated for each symbol."
+    )
 
 
-@router.post("/run", response_model=IngestionResult)
+@router.post(
+    "/run",
+    response_model=IngestionResult,
+    summary="Run the full ingestion pipeline",
+    description=(
+        "Triggers ingestion, transformation, and aggregation "
+        "for all enabled symbols."
+    ),
+    responses={
+        500: {"description": "A pipeline stage failed during execution."},
+    },
+)
 def run_full_pipeline(db: Session = Depends(get_db)):
     """Trigger the full ingestion → transformation → aggregation pipeline."""
     try:

@@ -21,6 +21,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 - [ ] UI para acompanhamento geral dos status dos dados ingeridos
 - [ ] Aprimorar o README.md e a pasta docs/
 - [ ] Acoplar Harness ao repositório
+- [ ] Paginação na API
 
 
 ## Em consideração

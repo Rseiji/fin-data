@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.application.status.service import get_series_status
@@ -22,48 +22,65 @@ def _validate_date_range(start: Optional[datetime], end: Optional[datetime]) -> 
 
 
 class QuoteOut(BaseModel):
-    id: str
-    symbol: str
-    asset_type: str
-    price: str
-    currency: str
-    quote_date: datetime
-    source: str
-    processed_at: datetime
+    id: str = Field(description="Unique identifier of the processed quote.")
+    symbol: str = Field(description="Asset symbol, such as BTCUSD or PETR4.")
+    asset_type: str = Field(description="Category of the asset.")
+    price: str = Field(description="Quote price represented as a decimal string.")
+    currency: str = Field(description="Currency in which the quote is expressed.")
+    quote_date: datetime = Field(description="Date and time associated with the quote.")
+    source: str = Field(description="External source that provided the quote.")
+    processed_at: datetime = Field(description="Date and time when the quote was processed.")
 
     model_config = {"from_attributes": True}
 
 
 class DailySummaryOut(BaseModel):
-    id: str
-    symbol: str
-    asset_type: str
-    trade_date: datetime
-    open_price: Optional[str]
-    close_price: Optional[str]
-    high_price: Optional[str]
-    low_price: Optional[str]
-    pct_change: Optional[str]
-    currency: str
-    computed_at: datetime
+    id: str = Field(description="Unique identifier of the daily summary.")
+    symbol: str = Field(description="Asset symbol, such as BTCUSD or PETR4.")
+    asset_type: str = Field(description="Category of the asset.")
+    trade_date: datetime = Field(description="Trading date represented by the summary.")
+    open_price: Optional[str] = Field(description="Opening price as a decimal string.")
+    close_price: Optional[str] = Field(description="Closing price as a decimal string.")
+    high_price: Optional[str] = Field(description="Highest price as a decimal string.")
+    low_price: Optional[str] = Field(description="Lowest price as a decimal string.")
+    pct_change: Optional[str] = Field(
+        description="Percentage change as a decimal string."
+    )
+    currency: str = Field(description="Currency in which the summary is expressed.")
+    computed_at: datetime = Field(description="Date and time when the summary was computed.")
 
     model_config = {"from_attributes": True}
 
 
 class SeriesStatusOut(BaseModel):
-    symbol: str
-    start_date: datetime
-    last_date: datetime
-    last_price: str
-    first_price: str
-    variance: str
-    standard_deviation: str
-    mean: str
-    granularity: str
-    record_count: int
+    symbol: str = Field(description="Asset symbol represented by the series.")
+    start_date: datetime = Field(description="Date of the first record in the series.")
+    last_date: datetime = Field(description="Date of the latest record in the series.")
+    last_price: str = Field(description="Latest price as a decimal string.")
+    first_price: str = Field(description="First price as a decimal string.")
+    variance: str = Field(description="Sample variance as a decimal string.")
+    standard_deviation: str = Field(
+        description="Sample standard deviation as a decimal string."
+    )
+    mean: str = Field(description="Arithmetic mean as a decimal string.")
+    granularity: str = Field(description="Inferred periodicity of the series.")
+    record_count: int = Field(description="Number of records in the series.")
 
 
-@router.get("/status", response_model=List[SeriesStatusOut])
+@router.get(
+    "/status",
+    response_model=List[SeriesStatusOut],
+    summary="Get historical series status",
+    description=(
+        "Returns statistical metadata for each requested symbol, "
+        "preserving the order provided in the query string."
+    ),
+    responses={
+        404: {
+            "description": "No historical series was found for one or more symbols."
+        },
+    },
+)
 def get_series_statuses(
     symbols: List[str] = Query(..., min_length=1),
     db: Session = Depends(get_db),
@@ -97,7 +114,15 @@ def get_series_statuses(
     return statuses
 
 
-@router.get("/{symbol}/latest", response_model=QuoteOut)
+@router.get(
+    "/{symbol}/latest",
+    response_model=QuoteOut,
+    summary="Get the latest quote",
+    description="Returns the most recent processed quote for the requested symbol.",
+    responses={
+        404: {"description": "No quote was found for the requested symbol."},
+    },
+)
 def get_latest_quote(symbol: str, db: Session = Depends(get_db)):
     quote = repositories.find_latest_quote(db, symbol.upper())
     if quote is None:
@@ -114,7 +139,18 @@ def get_latest_quote(symbol: str, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/{symbol}/history", response_model=List[QuoteOut])
+@router.get(
+    "/{symbol}/history",
+    response_model=List[QuoteOut],
+    summary="Get quote history",
+    description=(
+        "Returns the historical quotes for a symbol, optionally filtered "
+        "by a start and end datetime."
+    ),
+    responses={
+        400: {"description": "The start datetime is later than the end datetime."},
+    },
+)
 def get_quote_history(
     symbol: str,
     start: Optional[datetime] = Query(None),
@@ -138,7 +174,18 @@ def get_quote_history(
     ]
 
 
-@router.get("/{symbol}/summary", response_model=List[DailySummaryOut])
+@router.get(
+    "/{symbol}/summary",
+    response_model=List[DailySummaryOut],
+    summary="Get daily quote summaries",
+    description=(
+        "Returns daily OHLC summaries for a symbol, optionally filtered "
+        "by a start and end datetime."
+    ),
+    responses={
+        400: {"description": "The start datetime is later than the end datetime."},
+    },
+)
 def get_daily_summary(
     symbol: str,
     start: Optional[datetime] = Query(None),
