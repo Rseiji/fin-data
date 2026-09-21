@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.api.app import create_app
 from src.domain.entities.quote import Quote, DailySummary
 from src.infrastructure.database.engine import get_db
+from src.application.ingestion.jobs import IngestionJob
 
 
 def _mock_db():
@@ -81,6 +82,57 @@ def test_run_full_pipeline(client, mocker):
         "transformed": {"BTCUSD": 8},
         "aggregated": {"BTCUSD": 2},
     }
+
+
+def test_start_ingestion_run_returns_tracking_id(client):
+    job = IngestionJob(id="run-1")
+
+    class FakeManager:
+        def submit(self):
+            return job
+
+        def get(self, _run_id):
+            return job
+
+    client.app.state.ingestion_manager = FakeManager()
+
+    resp = client.post("/api/v1/ingestion/runs")
+
+    assert resp.status_code == 202
+    assert resp.json()["run_id"] == "run-1"
+    assert resp.json()["status"] == "queued"
+
+
+def test_get_ingestion_run_status(client):
+    job = IngestionJob(id="run-1", status="succeeded", result={
+        "ingested": {"BTCUSD": 1},
+        "transformed": {"BTCUSD": 1},
+        "aggregated": {"BTCUSD": 1},
+    })
+
+    class FakeManager:
+        def get(self, _run_id):
+            return job
+
+    client.app.state.ingestion_manager = FakeManager()
+
+    resp = client.get("/api/v1/ingestion/runs/run-1")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "succeeded"
+    assert resp.json()["result"]["aggregated"] == {"BTCUSD": 1}
+
+
+def test_get_ingestion_run_returns_404_for_unknown_run(client):
+    class FakeManager:
+        def get(self, _run_id):
+            return None
+
+    client.app.state.ingestion_manager = FakeManager()
+
+    resp = client.get("/api/v1/ingestion/runs/unknown")
+
+    assert resp.status_code == 404
 
 
 @pytest.mark.parametrize(

@@ -71,6 +71,8 @@ uv run python main.py
 | GET | `/api/v1/quotes/{symbol}/summary` | Paginated daily OHLC summaries |
 | GET | `/api/v1/quotes/status?symbols=PETR4&symbols=VALE3` | Historical-series metadata and statistics |
 | POST | `/api/v1/ingestion/run` | Trigger full pipeline manually |
+| POST | `/api/v1/ingestion/runs` | Start an asynchronous pipeline run |
+| GET | `/api/v1/ingestion/runs/{run_id}` | Get asynchronous pipeline status |
 
 The status endpoint returns one record per requested symbol, preserving query order. It
 includes the first and last dates and prices, sample variance and standard deviation,

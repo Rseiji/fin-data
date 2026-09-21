@@ -5,7 +5,8 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 ## Prioridade alta
 
 - [x] Separar liveness e readiness, validando a conectividade com o banco no readiness check
-- [ ] Executar a ingestão de forma assíncrona, com recurso de acompanhar o status de cada execução
+- [x] Executar a ingestão de forma assíncrona, com recurso de acompanhar o status de cada execução
+- [ ] Persistir o estado das execuções assíncronas no PostgreSQL ou adotar uma fila distribuída para sobreviver a reinícios e múltiplas instâncias
 - [ ] Impedir execuções simultâneas do pipeline e garantir idempotência por execução
 - [x] Adicionar paginação e limites máximos aos endpoints de histórico e resumo
 - [ ] Remover detalhes de exceções internas das respostas HTTP e adicionar `request_id` para rastreamento

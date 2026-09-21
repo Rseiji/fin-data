@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from src.api.routers import quotes, ingestion
+from src.application.ingestion.jobs import IngestionJobManager
 from src.infrastructure.database.engine import create_all_tables, get_db
 from src.config.settings import settings
 
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     create_all_tables()
     logger.info("fin-data API started (env=%s)", settings.app_env)
     yield
+    app.state.ingestion_manager.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -36,6 +38,7 @@ def create_app() -> FastAPI:
 
     app.include_router(quotes.router, prefix="/api/v1")
     app.include_router(ingestion.router, prefix="/api/v1")
+    app.state.ingestion_manager = IngestionJobManager(ingestion._execute_pipeline)
 
     @app.get("/health", tags=["health"])
     def health():
