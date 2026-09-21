@@ -236,7 +236,26 @@ def test_quote_history_forwards_date_filters(client, mocker):
     )
 
 
-def test_quote_history_forwards_pagination_and_rejects_excessive_limit(client, mocker):
+@pytest.mark.parametrize(
+    "query",
+    [
+        "limit=0",
+        "limit=1001",
+        "offset=-1",
+    ],
+)
+def test_quote_history_rejects_invalid_pagination_limits(client, mocker, query):
+    find_quotes = mocker.patch(
+        "src.api.routers.quotes.repositories.find_quotes_by_symbol",
+        return_value=[],
+    )
+
+    resp = client.get(f"/api/v1/quotes/BTCUSD/history?{query}")
+
+    assert resp.status_code == 422
+    find_quotes.assert_not_called()
+
+def test_quote_history_forwards_pagination(client, mocker):
     find_quotes = mocker.patch(
         "src.api.routers.quotes.repositories.find_quotes_by_symbol",
         return_value=[],
@@ -249,8 +268,18 @@ def test_quote_history_forwards_pagination_and_rejects_excessive_limit(client, m
         ANY, "BTCUSD", start=None, end=None, limit=26, offset=50
     )
 
-    resp = client.get("/api/v1/quotes/BTCUSD/history?limit=1001")
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=1001", "offset=-1"])
+def test_daily_summary_rejects_invalid_pagination_limits(client, mocker, query):
+    find_summaries = mocker.patch(
+        "src.api.routers.quotes.repositories.find_daily_summaries",
+        return_value=[],
+    )
+
+    resp = client.get(f"/api/v1/quotes/PETR4/summary?{query}")
+
     assert resp.status_code == 422
+    find_summaries.assert_not_called()
 
 
 def test_daily_summary_returns_serialized_summary(client, mocker):
