@@ -19,7 +19,9 @@ def _mock_db():
 @pytest.fixture
 def client():
     app = create_app()
-    app.dependency_overrides[get_db] = _mock_db
+    db = _mock_db()
+    app.dependency_overrides[get_db] = lambda: db
+    app.state.mock_db = db
     return TestClient(app)
 
 
@@ -39,6 +41,7 @@ def test_health_ready(client):
     resp = client.get("/health/ready")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok", "database": "ok"}
+    client.app.state.mock_db.execute.assert_called_once()
 
 
 def test_health_ready_returns_503_when_database_is_unavailable(client):

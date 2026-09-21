@@ -4,12 +4,12 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 
 ## Prioridade alta
 
-- [ ] Separar liveness e readiness, validando a conectividade com o banco no readiness check
+- [x] Separar liveness e readiness, validando a conectividade com o banco no readiness check
 - [ ] Executar a ingestão de forma assíncrona, com recurso de acompanhar o status de cada execução
 - [ ] Impedir execuções simultâneas do pipeline e garantir idempotência por execução
 - [x] Adicionar paginação e limites máximos aos endpoints de histórico e resumo
 - [ ] Remover detalhes de exceções internas das respostas HTTP e adicionar `request_id` para rastreamento
-- [ ] Adicionar testes de health com banco disponível e indisponível
+- [x] Adicionar testes de health com banco disponível e indisponível
 - [ ] Adicionar testes para paginação, limites e valores decimais iguais a zero
 
 ## Prioridade média

@@ -64,6 +64,8 @@ uv run python main.py
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Health check |
+| GET | `/health/live` | Liveness check, sem dependências externas |
+| GET | `/health/ready` | Readiness check, validando conexão com o banco |
 | GET | `/api/v1/quotes/{symbol}/latest` | Latest price for a symbol |
 | GET | `/api/v1/quotes/{symbol}/history` | Paginated price history (filterable by date) |
 | GET | `/api/v1/quotes/{symbol}/summary` | Paginated daily OHLC summaries |
