@@ -15,8 +15,8 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
 
 ## Prioridade média
 
-- [ ] Validar e normalizar símbolos, incluindo tamanho, formato, duplicidade e quantidade máxima por requisição
-- [ ] Definir contrato explícito para timezone e limites inclusivos de `start` e `end`
+- [x] Validar e normalizar símbolos, incluindo tamanho, formato, duplicidade e quantidade máxima por requisição
+- [x] Definir contrato explícito para timezone e limites inclusivos de `start` e `end`
 - [ ] Tornar a seleção do último preço determinística quando houver múltiplas fontes
 - [ ] Otimizar o endpoint de status para evitar consultas N+1 e carregar históricos inteiros em memória
 - [ ] Migrar criação de tabelas em produção para migrações Alembic

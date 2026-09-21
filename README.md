@@ -83,6 +83,11 @@ History and summary endpoints accept `limit` (1-1000) and `offset` query paramet
 Their responses include `items`, `has_next`, and `next_offset`; clients can continue
 requesting pages while `has_next` is true.
 
+Symbols are normalized with whitespace removed and uppercase conversion. They must
+contain only letters and digits, be 1-32 characters long, and status requests accept
+at most 50 distinct symbols. Duplicate symbols are rejected. `start` and `end` must
+be timezone-aware ISO 8601 datetimes, and both boundaries are inclusive.
+
 For clients that should receive the complete series without implementing pagination,
 use the helper script:
 

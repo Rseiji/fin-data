@@ -492,6 +492,28 @@ def test_quote_history_invalid_date_range_returns_400(client):
     assert "start" in resp.json()["detail"].lower()
 
 
+@pytest.mark.parametrize("endpoint", ["history", "summary"])
+def test_quote_endpoints_require_timezone_for_date_filters(client, endpoint):
+    resp = client.get(
+        f"/api/v1/quotes/BTCUSD/{endpoint}?start=2024-01-01T00:00:00"
+    )
+
+    assert resp.status_code == 400
+    assert "timezone" in resp.json()["detail"].lower()
+
+
+def test_latest_quote_normalizes_symbol(client, mocker):
+    find_latest = mocker.patch(
+        "src.api.routers.quotes.repositories.find_latest_quote",
+        return_value=None,
+    )
+
+    resp = client.get("/api/v1/quotes/%20btcusd%20/latest")
+
+    assert resp.status_code == 404
+    find_latest.assert_called_once_with(ANY, "BTCUSD")
+
+
 def test_daily_summary_invalid_date_range_returns_400(client):
     resp = client.get(
         "/api/v1/quotes/BTCUSD/summary?start=2024-02-02T00:00:00&end=2024-01-01T00:00:00"
@@ -504,6 +526,34 @@ def test_series_status_requires_at_least_one_symbol(client):
     resp = client.get("/api/v1/quotes/status")
 
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "symbols=BTCUSD&symbols=btcusd",
+        "symbols=BTC-USD",
+        "symbols=",
+    ],
+)
+def test_series_status_rejects_invalid_symbols(client, mocker, query):
+    find_quotes = mocker.patch(
+        "src.application.status.service.repositories.find_quotes_by_symbol",
+        return_value=[],
+    )
+
+    resp = client.get(f"/api/v1/quotes/status?{query}")
+
+    assert resp.status_code == 400
+    find_quotes.assert_not_called()
+
+
+def test_series_status_rejects_more_than_maximum_symbols(client):
+    symbols = "&".join("symbols=BTCUSD" for _ in range(51))
+
+    resp = client.get(f"/api/v1/quotes/status?{symbols}")
+
+    assert resp.status_code == 400
 
 
 def test_series_status_preserves_requested_order(client, mocker):

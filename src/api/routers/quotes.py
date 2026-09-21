@@ -1,5 +1,6 @@
 """Quote endpoints – latest price, historical series, daily summaries."""
 from datetime import datetime
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,8 +13,42 @@ from src.infrastructure.database import repositories
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
+MAX_SYMBOLS_PER_REQUEST = 50
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,32}$")
+
+
+def _normalize_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if not SYMBOL_PATTERN.fullmatch(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="symbol must contain only letters and digits and be 1-32 characters long",
+        )
+    return normalized
+
+
+def _normalize_symbols(symbols: List[str]) -> List[str]:
+    if not symbols:
+        raise HTTPException(status_code=400, detail="at least one symbol is required")
+    if len(symbols) > MAX_SYMBOLS_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"a maximum of {MAX_SYMBOLS_PER_REQUEST} symbols is allowed per request",
+        )
+
+    normalized = [_normalize_symbol(symbol) for symbol in symbols]
+    if len(set(normalized)) != len(normalized):
+        raise HTTPException(status_code=400, detail="symbols must not contain duplicates")
+    return normalized
+
 
 def _validate_date_range(start: Optional[datetime], end: Optional[datetime]) -> None:
+    for name, value in (("start", start), ("end", end)):
+        if value is not None and value.tzinfo is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must include a timezone offset",
+            )
     if start and end and start > end:
         raise HTTPException(
             status_code=400,
@@ -107,12 +142,13 @@ def get_series_statuses(
     symbols: List[str] = Query(..., min_length=1),
     db: Session = Depends(get_db),
 ):
+    symbols = _normalize_symbols(symbols)
     statuses = []
     missing = []
     for symbol in symbols:
         status = get_series_status(db, symbol)
         if status is None:
-            missing.append(symbol.upper())
+            missing.append(symbol)
             continue
         statuses.append(
             SeriesStatusOut(
@@ -146,9 +182,10 @@ def get_series_statuses(
     },
 )
 def get_latest_quote(symbol: str, db: Session = Depends(get_db)):
-    quote = repositories.find_latest_quote(db, symbol.upper())
+    normalized_symbol = _normalize_symbol(symbol)
+    quote = repositories.find_latest_quote(db, normalized_symbol)
     if quote is None:
-        raise HTTPException(status_code=404, detail=f"No quote found for {symbol}")
+        raise HTTPException(status_code=404, detail=f"No quote found for {normalized_symbol}")
     return QuoteOut(
         id=quote.id,
         symbol=quote.symbol,
@@ -181,9 +218,10 @@ def get_quote_history(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    normalized_symbol = _normalize_symbol(symbol)
     _validate_date_range(start, end)
     quotes = repositories.find_quotes_by_symbol(
-        db, symbol.upper(), start=start, end=end, limit=limit + 1, offset=offset
+        db, normalized_symbol, start=start, end=end, limit=limit + 1, offset=offset
     )
     has_next = len(quotes) > limit
     items = [
@@ -228,9 +266,10 @@ def get_daily_summary(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    normalized_symbol = _normalize_symbol(symbol)
     _validate_date_range(start, end)
     summaries = repositories.find_daily_summaries(
-        db, symbol.upper(), start=start, end=end, limit=limit + 1, offset=offset
+        db, normalized_symbol, start=start, end=end, limit=limit + 1, offset=offset
     )
     has_next = len(summaries) > limit
     items = [
