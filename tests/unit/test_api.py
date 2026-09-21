@@ -5,6 +5,7 @@ from unittest.mock import ANY, patch, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.app import create_app
 from src.domain.entities.quote import Quote, DailySummary
@@ -26,6 +27,29 @@ def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+def test_health_live(client):
+    resp = client.get("/health/live")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
+def test_health_ready(client):
+    resp = client.get("/health/ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "database": "ok"}
+
+
+def test_health_ready_returns_503_when_database_is_unavailable(client):
+    db = MagicMock()
+    db.execute.side_effect = SQLAlchemyError("connection refused")
+    client.app.dependency_overrides[get_db] = lambda: db
+
+    resp = client.get("/health/ready")
+
+    assert resp.status_code == 503
+    assert resp.json() == {"detail": "Database is unavailable"}
 
 
 def test_run_full_pipeline(client, mocker):
@@ -93,7 +117,7 @@ def test_run_full_pipeline_returns_500_when_stage_fails(
     resp = client.post("/api/v1/ingestion/run")
 
     assert resp.status_code == 500
-    assert resp.json()["detail"] == f"{detail}: pipeline error"
+    assert resp.json()["detail"] == detail
 
 
 def test_latest_quote_not_found(client, mocker):
@@ -140,7 +164,13 @@ def test_quote_history(client, mocker):
     )
     resp = client.get("/api/v1/quotes/BTCUSD/history")
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json() == {
+        "items": [],
+        "limit": 100,
+        "offset": 0,
+        "has_next": False,
+        "next_offset": None,
+    }
 
 
 def test_quote_history_returns_serialized_quotes(client, mocker):
@@ -163,8 +193,8 @@ def test_quote_history_returns_serialized_quotes(client, mocker):
     resp = client.get("/api/v1/quotes/btcusd/history")
 
     assert resp.status_code == 200
-    assert resp.json() == [
-        {
+    assert resp.json() == {
+        "items": [{
             "id": "q1",
             "symbol": "BTCUSD",
             "asset_type": "crypto",
@@ -173,8 +203,12 @@ def test_quote_history_returns_serialized_quotes(client, mocker):
             "quote_date": "2024-01-01T00:00:00Z",
             "source": "coingecko",
             "processed_at": "2024-01-01T01:00:00Z",
-        }
-    ]
+        }],
+        "limit": 100,
+        "offset": 0,
+        "has_next": False,
+        "next_offset": None,
+    }
 
 
 def test_quote_history_forwards_date_filters(client, mocker):
@@ -194,7 +228,26 @@ def test_quote_history_forwards_date_filters(client, mocker):
         "BTCUSD",
         start=datetime(2024, 1, 1, tzinfo=timezone.utc),
         end=datetime(2024, 1, 31, 23, 59, 59, tzinfo=timezone.utc),
+        limit=101,
+        offset=0,
     )
+
+
+def test_quote_history_forwards_pagination_and_rejects_excessive_limit(client, mocker):
+    find_quotes = mocker.patch(
+        "src.api.routers.quotes.repositories.find_quotes_by_symbol",
+        return_value=[],
+    )
+
+    resp = client.get("/api/v1/quotes/BTCUSD/history?limit=25&offset=50")
+
+    assert resp.status_code == 200
+    find_quotes.assert_called_once_with(
+        ANY, "BTCUSD", start=None, end=None, limit=26, offset=50
+    )
+
+    resp = client.get("/api/v1/quotes/BTCUSD/history?limit=1001")
+    assert resp.status_code == 422
 
 
 def test_daily_summary_returns_serialized_summary(client, mocker):
@@ -219,8 +272,8 @@ def test_daily_summary_returns_serialized_summary(client, mocker):
     resp = client.get("/api/v1/quotes/petr4/summary")
 
     assert resp.status_code == 200
-    assert resp.json() == [
-        {
+    assert resp.json() == {
+        "items": [{
             "id": "summary-1",
             "symbol": "PETR4",
             "asset_type": "stock",
@@ -232,8 +285,12 @@ def test_daily_summary_returns_serialized_summary(client, mocker):
             "pct_change": "3.13",
             "currency": "BRL",
             "computed_at": "2024-01-02T01:00:00Z",
-        }
-    ]
+        }],
+        "limit": 100,
+        "offset": 0,
+        "has_next": False,
+        "next_offset": None,
+    }
 
 
 def test_daily_summary_preserves_optional_null_values(client, mocker):
@@ -257,12 +314,90 @@ def test_daily_summary_preserves_optional_null_values(client, mocker):
     resp = client.get("/api/v1/quotes/PETR4/summary")
 
     assert resp.status_code == 200
-    data = resp.json()[0]
+    data = resp.json()["items"][0]
     assert data["open_price"] is None
     assert data["close_price"] == "36.20"
     assert data["high_price"] is None
     assert data["low_price"] == "34.90"
     assert data["pct_change"] is None
+
+
+def test_quote_history_returns_next_page_metadata(client, mocker):
+    quotes = [
+        Quote(
+            id=f"q{index}",
+            bronze_id=f"b{index}",
+            symbol="BTCUSD",
+            asset_type="crypto",
+            price=Decimal(str(index)),
+            currency="USD",
+            quote_date=datetime(2024, 1, index, tzinfo=timezone.utc),
+            source="coingecko",
+            processed_at=datetime(2024, 1, index, tzinfo=timezone.utc),
+        )
+        for index in range(1, 4)
+    ]
+    find_quotes = mocker.patch(
+        "src.api.routers.quotes.repositories.find_quotes_by_symbol",
+        return_value=quotes,
+    )
+
+    resp = client.get("/api/v1/quotes/BTCUSD/history?limit=2&offset=4")
+
+    assert resp.status_code == 200
+    assert resp.json()["has_next"] is True
+    assert resp.json()["next_offset"] == 6
+    assert len(resp.json()["items"]) == 2
+    find_quotes.assert_called_once_with(
+        ANY, "BTCUSD", start=None, end=None, limit=3, offset=4
+    )
+
+
+def test_daily_summary_returns_page_metadata(client, mocker):
+    mocker.patch(
+        "src.api.routers.quotes.repositories.find_daily_summaries",
+        return_value=[],
+    )
+
+    resp = client.get("/api/v1/quotes/PETR4/summary?limit=25&offset=50")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "items": [],
+        "limit": 25,
+        "offset": 50,
+        "has_next": False,
+        "next_offset": None,
+    }
+
+
+def test_daily_summary_preserves_zero_values(client, mocker):
+    summary = DailySummary(
+        id="summary-1",
+        symbol="PETR4",
+        asset_type="stock",
+        trade_date=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        open_price=Decimal("0"),
+        close_price=Decimal("0.00"),
+        high_price=Decimal("0"),
+        low_price=Decimal("0"),
+        pct_change=Decimal("0"),
+        currency="BRL",
+    )
+    mocker.patch(
+        "src.api.routers.quotes.repositories.find_daily_summaries",
+        return_value=[summary],
+    )
+
+    resp = client.get("/api/v1/quotes/PETR4/summary")
+
+    assert resp.status_code == 200
+    data = resp.json()["items"][0]
+    assert data["open_price"] == "0"
+    assert data["close_price"] == "0.00"
+    assert data["high_price"] == "0"
+    assert data["low_price"] == "0"
+    assert data["pct_change"] == "0"
 
 
 def test_quote_history_invalid_date_range_returns_400(client):

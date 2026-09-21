@@ -1,4 +1,5 @@
 """Ingestion endpoints – trigger data collection and transformation manually."""
+import logging
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from src.application.aggregation.aggregate import run_aggregation_pipeline
 from src.infrastructure.database import repositories
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
+logger = logging.getLogger(__name__)
 
 
 class IngestionResult(BaseModel):
@@ -43,7 +45,8 @@ def run_full_pipeline(db: Session = Depends(get_db)):
     try:
         ingested = run_ingestion_pipeline(db)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
+        logger.exception("Ingestion stage failed")
+        raise HTTPException(status_code=500, detail="Ingestion failed") from exc
 
     all_symbols = (
         repositories.list_enabled_symbols(db)
@@ -52,12 +55,14 @@ def run_full_pipeline(db: Session = Depends(get_db)):
     try:
         transformed = run_transformation_pipeline(db, all_symbols)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Transformation failed: {exc}") from exc
+        logger.exception("Transformation stage failed")
+        raise HTTPException(status_code=500, detail="Transformation failed") from exc
 
     try:
         aggregated = run_aggregation_pipeline(db, all_symbols)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Aggregation failed: {exc}") from exc
+        logger.exception("Aggregation stage failed")
+        raise HTTPException(status_code=500, detail="Aggregation failed") from exc
 
     return IngestionResult(
         ingested=ingested, transformed=transformed, aggregated=aggregated

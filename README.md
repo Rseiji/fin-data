@@ -65,8 +65,8 @@ uv run python main.py
 |---|---|---|
 | GET | `/health` | Health check |
 | GET | `/api/v1/quotes/{symbol}/latest` | Latest price for a symbol |
-| GET | `/api/v1/quotes/{symbol}/history` | Price history (filterable by date) |
-| GET | `/api/v1/quotes/{symbol}/summary` | Daily OHLC summaries |
+| GET | `/api/v1/quotes/{symbol}/history` | Paginated price history (filterable by date) |
+| GET | `/api/v1/quotes/{symbol}/summary` | Paginated daily OHLC summaries |
 | GET | `/api/v1/quotes/status?symbols=PETR4&symbols=VALE3` | Historical-series metadata and statistics |
 | POST | `/api/v1/ingestion/run` | Trigger full pipeline manually |
 
@@ -74,6 +74,18 @@ The status endpoint returns one record per requested symbol, preserving query or
 includes the first and last dates and prices, sample variance and standard deviation,
 arithmetic mean, inferred granularity, and record count. A symbol without historical
 records returns HTTP 404.
+
+History and summary endpoints accept `limit` (1-1000) and `offset` query parameters.
+Their responses include `items`, `has_next`, and `next_offset`; clients can continue
+requesting pages while `has_next` is true.
+
+For clients that should receive the complete series without implementing pagination,
+use the helper script:
+
+```bash
+uv run python scripts/fetch_history.py BTCUSD
+uv run python scripts/fetch_history.py PETR4 --summary
+```
 
 To query the endpoint from the command line while the API is running:
 

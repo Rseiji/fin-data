@@ -2,10 +2,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from src.api.routers import quotes, ingestion
-from src.infrastructure.database.engine import create_all_tables
+from src.infrastructure.database.engine import create_all_tables, get_db
 from src.config.settings import settings
 
 logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
@@ -37,6 +40,19 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     def health():
         return {"status": "ok"}
+
+    @app.get("/health/live", tags=["health"])
+    def health_live():
+        return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["health"])
+    def health_ready(db: Session = Depends(get_db)):
+        try:
+            db.execute(text("SELECT 1"))
+        except SQLAlchemyError as exc:
+            logger.warning("Readiness check failed: %s", exc)
+            raise HTTPException(status_code=503, detail="Database is unavailable") from exc
+        return {"status": "ok", "database": "ok"}
 
     return app
 

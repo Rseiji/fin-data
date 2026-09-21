@@ -171,13 +171,18 @@ def find_quotes_by_symbol(
     symbol: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> List[Quote]:
     q = db.query(models.SilverQuote).filter(models.SilverQuote.symbol == symbol)
     if start:
         q = q.filter(models.SilverQuote.quote_date >= start)
     if end:
         q = q.filter(models.SilverQuote.quote_date <= end)
-    rows = q.order_by(models.SilverQuote.quote_date.desc()).all()
+    q = q.order_by(models.SilverQuote.quote_date.desc()).offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    rows = q.all()
     return [
         Quote(
             id=r.id,
@@ -265,6 +270,8 @@ def find_daily_summaries(
     symbol: str,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> List[DailySummary]:
     q = db.query(models.GoldDailySummary).filter(
         models.GoldDailySummary.symbol == symbol
@@ -273,7 +280,10 @@ def find_daily_summaries(
         q = q.filter(models.GoldDailySummary.trade_date >= start)
     if end:
         q = q.filter(models.GoldDailySummary.trade_date <= end)
-    rows = q.order_by(models.GoldDailySummary.trade_date.desc()).all()
+    q = q.order_by(models.GoldDailySummary.trade_date.desc()).offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    rows = q.all()
     return [
         DailySummary(
             id=r.id,

@@ -34,6 +34,16 @@ class QuoteOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class QuotePageOut(BaseModel):
+    items: List[QuoteOut] = Field(description="Quotes in the requested page.")
+    limit: int = Field(description="Maximum number of items requested.")
+    offset: int = Field(description="Number of items skipped before this page.")
+    has_next: bool = Field(description="Whether another page is available.")
+    next_offset: Optional[int] = Field(
+        description="Offset for the next page, when one is available."
+    )
+
+
 class DailySummaryOut(BaseModel):
     id: str = Field(description="Unique identifier of the daily summary.")
     symbol: str = Field(description="Asset symbol, such as BTCUSD or PETR4.")
@@ -50,6 +60,18 @@ class DailySummaryOut(BaseModel):
     computed_at: datetime = Field(description="Date and time when the summary was computed.")
 
     model_config = {"from_attributes": True}
+
+
+class DailySummaryPageOut(BaseModel):
+    items: List[DailySummaryOut] = Field(
+        description="Daily summaries in the requested page."
+    )
+    limit: int = Field(description="Maximum number of items requested.")
+    offset: int = Field(description="Number of items skipped before this page.")
+    has_next: bool = Field(description="Whether another page is available.")
+    next_offset: Optional[int] = Field(
+        description="Offset for the next page, when one is available."
+    )
 
 
 class SeriesStatusOut(BaseModel):
@@ -141,7 +163,7 @@ def get_latest_quote(symbol: str, db: Session = Depends(get_db)):
 
 @router.get(
     "/{symbol}/history",
-    response_model=List[QuoteOut],
+    response_model=QuotePageOut,
     summary="Get quote history",
     description=(
         "Returns the historical quotes for a symbol, optionally filtered "
@@ -155,11 +177,16 @@ def get_quote_history(
     symbol: str,
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     _validate_date_range(start, end)
-    quotes = repositories.find_quotes_by_symbol(db, symbol.upper(), start=start, end=end)
-    return [
+    quotes = repositories.find_quotes_by_symbol(
+        db, symbol.upper(), start=start, end=end, limit=limit + 1, offset=offset
+    )
+    has_next = len(quotes) > limit
+    items = [
         QuoteOut(
             id=q.id,
             symbol=q.symbol,
@@ -170,13 +197,20 @@ def get_quote_history(
             source=q.source,
             processed_at=q.processed_at,
         )
-        for q in quotes
+        for q in quotes[:limit]
     ]
+    return QuotePageOut(
+        items=items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        next_offset=offset + limit if has_next else None,
+    )
 
 
 @router.get(
     "/{symbol}/summary",
-    response_model=List[DailySummaryOut],
+    response_model=DailySummaryPageOut,
     summary="Get daily quote summaries",
     description=(
         "Returns daily OHLC summaries for a symbol, optionally filtered "
@@ -190,23 +224,35 @@ def get_daily_summary(
     symbol: str,
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     _validate_date_range(start, end)
-    summaries = repositories.find_daily_summaries(db, symbol.upper(), start=start, end=end)
-    return [
+    summaries = repositories.find_daily_summaries(
+        db, symbol.upper(), start=start, end=end, limit=limit + 1, offset=offset
+    )
+    has_next = len(summaries) > limit
+    items = [
         DailySummaryOut(
             id=s.id,
             symbol=s.symbol,
             asset_type=s.asset_type,
             trade_date=s.trade_date,
-            open_price=str(s.open_price) if s.open_price else None,
-            close_price=str(s.close_price) if s.close_price else None,
-            high_price=str(s.high_price) if s.high_price else None,
-            low_price=str(s.low_price) if s.low_price else None,
-            pct_change=str(s.pct_change) if s.pct_change else None,
+            open_price=str(s.open_price) if s.open_price is not None else None,
+            close_price=str(s.close_price) if s.close_price is not None else None,
+            high_price=str(s.high_price) if s.high_price is not None else None,
+            low_price=str(s.low_price) if s.low_price is not None else None,
+            pct_change=str(s.pct_change) if s.pct_change is not None else None,
             currency=s.currency,
             computed_at=s.computed_at,
         )
-        for s in summaries
+        for s in summaries[:limit]
     ]
+    return DailySummaryPageOut(
+        items=items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        next_offset=offset + limit if has_next else None,
+    )
