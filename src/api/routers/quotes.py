@@ -1,0 +1,297 @@
+"""Quote endpoints – latest price, historical series, daily summaries."""
+from datetime import datetime
+import re
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from src.application.status.service import get_series_status
+from src.infrastructure.database.engine import get_db
+from src.infrastructure.database import repositories
+
+router = APIRouter(prefix="/quotes", tags=["quotes"])
+
+MAX_SYMBOLS_PER_REQUEST = 50
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{1,32}$")
+
+
+def _normalize_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if not SYMBOL_PATTERN.fullmatch(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="symbol must contain only letters and digits and be 1-32 characters long",
+        )
+    return normalized
+
+
+def _normalize_symbols(symbols: List[str]) -> List[str]:
+    if not symbols:
+        raise HTTPException(status_code=400, detail="at least one symbol is required")
+    if len(symbols) > MAX_SYMBOLS_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"a maximum of {MAX_SYMBOLS_PER_REQUEST} symbols is allowed per request",
+        )
+
+    normalized = [_normalize_symbol(symbol) for symbol in symbols]
+    if len(set(normalized)) != len(normalized):
+        raise HTTPException(status_code=400, detail="symbols must not contain duplicates")
+    return normalized
+
+
+def _validate_date_range(start: Optional[datetime], end: Optional[datetime]) -> None:
+    for name, value in (("start", start), ("end", end)):
+        if value is not None and value.tzinfo is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must include a timezone offset",
+            )
+    if start and end and start > end:
+        raise HTTPException(
+            status_code=400,
+            detail="start date must be earlier than or equal to end date",
+        )
+
+
+class QuoteOut(BaseModel):
+    id: str = Field(description="Unique identifier of the processed quote.")
+    symbol: str = Field(description="Asset symbol, such as BTCUSD or PETR4.")
+    asset_type: str = Field(description="Category of the asset.")
+    price: str = Field(description="Quote price represented as a decimal string.")
+    currency: str = Field(description="Currency in which the quote is expressed.")
+    quote_date: datetime = Field(description="Date and time associated with the quote.")
+    source: str = Field(description="External source that provided the quote.")
+    processed_at: datetime = Field(description="Date and time when the quote was processed.")
+
+    model_config = {"from_attributes": True}
+
+
+class QuotePageOut(BaseModel):
+    items: List[QuoteOut] = Field(description="Quotes in the requested page.")
+    limit: int = Field(description="Maximum number of items requested.")
+    offset: int = Field(description="Number of items skipped before this page.")
+    has_next: bool = Field(description="Whether another page is available.")
+    next_offset: Optional[int] = Field(
+        description="Offset for the next page, when one is available."
+    )
+
+
+class DailySummaryOut(BaseModel):
+    id: str = Field(description="Unique identifier of the daily summary.")
+    symbol: str = Field(description="Asset symbol, such as BTCUSD or PETR4.")
+    asset_type: str = Field(description="Category of the asset.")
+    trade_date: datetime = Field(description="Trading date represented by the summary.")
+    open_price: Optional[str] = Field(description="Opening price as a decimal string.")
+    close_price: Optional[str] = Field(description="Closing price as a decimal string.")
+    high_price: Optional[str] = Field(description="Highest price as a decimal string.")
+    low_price: Optional[str] = Field(description="Lowest price as a decimal string.")
+    pct_change: Optional[str] = Field(
+        description="Percentage change as a decimal string."
+    )
+    currency: str = Field(description="Currency in which the summary is expressed.")
+    computed_at: datetime = Field(description="Date and time when the summary was computed.")
+
+    model_config = {"from_attributes": True}
+
+
+class DailySummaryPageOut(BaseModel):
+    items: List[DailySummaryOut] = Field(
+        description="Daily summaries in the requested page."
+    )
+    limit: int = Field(description="Maximum number of items requested.")
+    offset: int = Field(description="Number of items skipped before this page.")
+    has_next: bool = Field(description="Whether another page is available.")
+    next_offset: Optional[int] = Field(
+        description="Offset for the next page, when one is available."
+    )
+
+
+class SeriesStatusOut(BaseModel):
+    symbol: str = Field(description="Asset symbol represented by the series.")
+    start_date: datetime = Field(description="Date of the first record in the series.")
+    last_date: datetime = Field(description="Date of the latest record in the series.")
+    last_price: str = Field(description="Latest price as a decimal string.")
+    first_price: str = Field(description="First price as a decimal string.")
+    variance: str = Field(description="Sample variance as a decimal string.")
+    standard_deviation: str = Field(
+        description="Sample standard deviation as a decimal string."
+    )
+    mean: str = Field(description="Arithmetic mean as a decimal string.")
+    granularity: str = Field(description="Inferred periodicity of the series.")
+    record_count: int = Field(description="Number of records in the series.")
+
+
+@router.get(
+    "/status",
+    response_model=List[SeriesStatusOut],
+    summary="Get historical series status",
+    description=(
+        "Returns statistical metadata for each requested symbol, "
+        "preserving the order provided in the query string."
+    ),
+    responses={
+        404: {
+            "description": "No historical series was found for one or more symbols."
+        },
+    },
+)
+def get_series_statuses(
+    symbols: List[str] = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    symbols = _normalize_symbols(symbols)
+    statuses = []
+    missing = []
+    for symbol in symbols:
+        status = get_series_status(db, symbol)
+        if status is None:
+            missing.append(symbol)
+            continue
+        statuses.append(
+            SeriesStatusOut(
+                symbol=status.symbol,
+                start_date=status.start_date,
+                last_date=status.last_date,
+                last_price=str(status.last_price),
+                first_price=str(status.first_price),
+                variance=str(status.variance),
+                standard_deviation=str(status.standard_deviation),
+                mean=str(status.mean),
+                granularity=status.granularity,
+                record_count=status.record_count,
+            )
+        )
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No historical series found for: {', '.join(missing)}",
+        )
+    return statuses
+
+
+@router.get(
+    "/{symbol}/latest",
+    response_model=QuoteOut,
+    summary="Get the latest quote",
+    description="Returns the most recent processed quote for the requested symbol.",
+    responses={
+        404: {"description": "No quote was found for the requested symbol."},
+    },
+)
+def get_latest_quote(symbol: str, db: Session = Depends(get_db)):
+    normalized_symbol = _normalize_symbol(symbol)
+    quote = repositories.find_latest_quote(db, normalized_symbol)
+    if quote is None:
+        raise HTTPException(status_code=404, detail=f"No quote found for {normalized_symbol}")
+    return QuoteOut(
+        id=quote.id,
+        symbol=quote.symbol,
+        asset_type=quote.asset_type,
+        price=str(quote.price),
+        currency=quote.currency,
+        quote_date=quote.quote_date,
+        source=quote.source,
+        processed_at=quote.processed_at,
+    )
+
+
+@router.get(
+    "/{symbol}/history",
+    response_model=QuotePageOut,
+    summary="Get quote history",
+    description=(
+        "Returns the historical quotes for a symbol, optionally filtered "
+        "by a start and end datetime."
+    ),
+    responses={
+        400: {"description": "The start datetime is later than the end datetime."},
+    },
+)
+def get_quote_history(
+    symbol: str,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    normalized_symbol = _normalize_symbol(symbol)
+    _validate_date_range(start, end)
+    quotes = repositories.find_quotes_by_symbol(
+        db, normalized_symbol, start=start, end=end, limit=limit + 1, offset=offset
+    )
+    has_next = len(quotes) > limit
+    items = [
+        QuoteOut(
+            id=q.id,
+            symbol=q.symbol,
+            asset_type=q.asset_type,
+            price=str(q.price),
+            currency=q.currency,
+            quote_date=q.quote_date,
+            source=q.source,
+            processed_at=q.processed_at,
+        )
+        for q in quotes[:limit]
+    ]
+    return QuotePageOut(
+        items=items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        next_offset=offset + limit if has_next else None,
+    )
+
+
+@router.get(
+    "/{symbol}/summary",
+    response_model=DailySummaryPageOut,
+    summary="Get daily quote summaries",
+    description=(
+        "Returns daily OHLC summaries for a symbol, optionally filtered "
+        "by a start and end datetime."
+    ),
+    responses={
+        400: {"description": "The start datetime is later than the end datetime."},
+    },
+)
+def get_daily_summary(
+    symbol: str,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    normalized_symbol = _normalize_symbol(symbol)
+    _validate_date_range(start, end)
+    summaries = repositories.find_daily_summaries(
+        db, normalized_symbol, start=start, end=end, limit=limit + 1, offset=offset
+    )
+    has_next = len(summaries) > limit
+    items = [
+        DailySummaryOut(
+            id=s.id,
+            symbol=s.symbol,
+            asset_type=s.asset_type,
+            trade_date=s.trade_date,
+            open_price=str(s.open_price) if s.open_price is not None else None,
+            close_price=str(s.close_price) if s.close_price is not None else None,
+            high_price=str(s.high_price) if s.high_price is not None else None,
+            low_price=str(s.low_price) if s.low_price is not None else None,
+            pct_change=str(s.pct_change) if s.pct_change is not None else None,
+            currency=s.currency,
+            computed_at=s.computed_at,
+        )
+        for s in summaries[:limit]
+    ]
+    return DailySummaryPageOut(
+        items=items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        next_offset=offset + limit if has_next else None,
+    )

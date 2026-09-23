@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-findata}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-findata}
+      POSTGRES_DB: ${DB_NAME:-findata}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      - db
+    environment:
+      # always target the "db" service by name, never the host .env DATABASE_URL (which points at localhost for local scripts)
+      DATABASE_URL: postgresql://${DB_USER:-findata}:${DB_PASSWORD:-findata}@db:5432/${DB_NAME:-findata}
+      DATABASE_SCHEMA: ${DATABASE_SCHEMA:-fin_data}
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      API_HOST: ${API_HOST:-0.0.0.0}
+      API_PORT: ${API_PORT:-8000}
+      INGESTION_LOOKBACK_DAYS: ${INGESTION_LOOKBACK_DAYS:-6}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
