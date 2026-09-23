@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     ingestion_lookback_days: int = 6
+    secret_key: str = "insecure-dev-secret-key-change-me"
+    access_token_expire_minutes: int = 60
 
 
 settings = Settings()

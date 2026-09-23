@@ -8,8 +8,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.app import create_app
+from src.api.routers.auth import get_current_user
 from src.domain.entities.quote import Quote, DailySummary
 from src.infrastructure.database.engine import get_db
+from src.infrastructure.database.models import User
 from src.application.ingestion.jobs import IngestionJob
 
 
@@ -22,6 +24,9 @@ def client():
     app = create_app()
     db = _mock_db()
     app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="u1", username="tester", hashed_password="", is_active=True
+    )
     app.state.mock_db = db
     return TestClient(app)
 

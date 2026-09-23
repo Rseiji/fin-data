@@ -1,5 +1,6 @@
 """SQLAlchemy-backed repository implementations."""
 import json
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
@@ -9,6 +10,18 @@ from sqlalchemy.orm import Session
 
 from src.domain.entities.quote import DailySummary, Quote, RawQuote
 from src.infrastructure.database import models
+
+
+def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
+    return db.query(models.User).filter_by(username=username).one_or_none()
+
+
+def create_user(db: Session, username: str, hashed_password: str) -> models.User:
+    user = models.User(id=str(uuid.uuid4()), username=username, hashed_password=hashed_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def list_enabled_assets(db: Session, asset_type: Optional[str] = None) -> List[models.TrackedAsset]:

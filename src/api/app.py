@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from src.api.routers import quotes, ingestion
+from src.api.routers.auth import get_current_user, router as auth_router
 from src.application.ingestion.jobs import IngestionJobManager
 from src.infrastructure.database.engine import create_all_tables, get_db
 from src.config.settings import settings
@@ -36,8 +37,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.include_router(quotes.router, prefix="/api/v1")
-    app.include_router(ingestion.router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(quotes.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+    app.include_router(ingestion.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
     app.state.ingestion_manager = IngestionJobManager(ingestion._execute_pipeline)
 
     @app.get("/health", tags=["health"])
