@@ -32,6 +32,16 @@ class Layer(str, enum.Enum):
     gold = "gold"
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True)
+    username = Column(String(64), nullable=False, unique=True)
+    hashed_password = Column(String(128), nullable=False)
+    is_active = Column(Boolean, nullable=False, server_default="1")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class TrackedAsset(Base):
     __tablename__ = "tracked_assets"
 

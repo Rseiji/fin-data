@@ -33,7 +33,7 @@ Ideias e melhorias futuras para o `fin-data`. Sem compromisso de prazo — apena
       Poderia haver uma para índice, outra para ações brasileiras, e assim por diante.
 - [ ] Cache da API. Evitar consultas repetitivas ao banco para dados frequentemente solicitados (caso escale ou para fins didáticos apenas)
 - [ ] API - aprimorar fluxo de versionamento e documentação
-- [ ] API - Autenticação
+- [x] API - Autenticação
 - [ ] CICD
 - [ ] Implementação em Cloud: Host database, API. Disponibilizar como serviço interno para alimentar outros projetos pessoais
 - [ ] Mecanismo de retry/backoff
